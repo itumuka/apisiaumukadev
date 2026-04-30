@@ -1,0 +1,70 @@
+<IfModule mod_rewrite.c>
+    <IfModule mod_negotiation.c>
+        # Nonaktifkan MultiViews dan Directory Listing
+        Options -MultiViews -Indexes
+    </IfModule>
+
+    RewriteEngine On
+
+    # Handle Authorization Header
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Redirect Trailing Slashes If Not A Folder...
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_URI} (.+)/$
+    RewriteRule ^ %1 [L,R=301]
+
+    # Block Access to Hidden Files and Directories (e.g., .htaccess, .git)
+    RewriteRule "(^|/)\." - [F]
+
+    # Block Access to Sensitive Files
+    RewriteRule ^(composer\.(json|lock)|env|.env|artisan|package-lock\.json|phpunit\.xml|server\.php|web\.config|*.bak|*.config|*.sql|*.dist|*.ini)$ - [F,L,NC]
+
+    # Deny Access to Backup and Source Files
+    RewriteRule (^|/)(\.|.*~|.*\.bak|.*\.swp|.*\.orig|.*\.save|.*\.old|.*\.config|.*\.dist)$ - [F,L]
+
+    # Block Access to PHP Files in Specific Directories (e.g., uploads, storage)
+    RewriteRule ^(storage|uploads|logs)/.*\.(php|pl|py|jsp|asp|aspx|sh|cgi)$ - [F,L,NC]
+
+    # Allow Access to Common Image Formats
+    RewriteRule \.(jpg|jpeg|png|gif|bmp|webp|svg|ico)$ - [L,NC]
+
+    # Send Requests To Front Controller...
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [L]
+
+    # X-XSS-Protection Header to prevent XSS
+    Header set X-XSS-Protection "1; mode=block"
+
+    # Content Security Policy (CSP) to prevent script injection
+    # Header set Content-Security-Policy "default-src 'self'; script-src 'self' 'nonce-wk21'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:;"
+
+
+
+    # HTTP Strict Transport Security (HSTS)
+    Header set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+
+    # Remove Server Signature
+    ServerSignature Off
+    Header unset Server
+    Header unset X-Powered-By
+</IfModule>
+<Files 403.shtml>
+order allow,deny
+allow from all
+</Files>
+
+deny from 202.57.211.67
+deny from 45.8.25.0/24
+deny from 96.0.0.0/8
+deny from 93.152.0.0/16
+deny from 93.185.162.0/24
+deny from 193.37.0.0/16
+deny from 88.253.0.0/16
+deny from 114.10.78.0/24
+deny from 185.213.83.0/24
+deny from 136.228.133.0/24
+deny from 209.146.61.0/24
+deny from 103.178.175.0/24

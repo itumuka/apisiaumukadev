@@ -150,6 +150,30 @@ class Mskripsi extends Model
                     'kode_syarat' => 'BAYAR_UJIAN'
                 ];
             }
+
+            // 5. Seminar Proposal Requirement (if enabled by prodi)
+            if ($fase == 'ujian' && $prodiConfig->ta_ada_sempro != 0) {
+                $sempro_lulus = DB::table('akd_skripsi_proposal as p')
+                    ->join('akd_skripsi as s', 'p.id_skripsi', '=', 's.id')
+                    ->where('s.nim', $nim)
+                    ->where('p.status', 'lulus')
+                    ->count() > 0;
+                
+                if (!$sempro_lulus) $semua_lolos = false;
+
+                $hasil[] = [
+                    'no' => $index++,
+                    'id_syarat_prodi' => null,
+                    'syarat' => 'Lulus Seminar Proposal',
+                    'isi' => $sempro_lulus ? 'Sudah Lulus' : 'Belum Lulus / Belum Seminar',
+                    'hubungi' => 'Kaprodi / Admin Skripsi',
+                    'status' => $sempro_lulus ? 'v' : 'x',
+                    'jenis' => 'sistem',
+                    'is_wajib' => 1,
+                    'tipe_upload' => null,
+                    'kode_syarat' => 'LULUS_SEMPRO'
+                ];
+            }
             
             return [
                 'syarat_list' => $hasil,
@@ -186,6 +210,15 @@ class Mskripsi extends Model
                     $has_ta = $this->checkHasTA($nim);
                     $isi_aktual = $has_ta > 0 ? "Sudah Diambil" : "Belum Diambil";
                     $is_terpenuhi = $has_ta > 0;
+                }
+                else if ($rule->kode_syarat == 'LULUS_SEMPRO') {
+                    $sempro_lulus = DB::table('akd_skripsi_proposal as p')
+                        ->join('akd_skripsi as s', 'p.id_skripsi', '=', 's.id')
+                        ->where('s.nim', $nim)
+                        ->where('p.status', 'lulus')
+                        ->count() > 0;
+                    $isi_aktual = $sempro_lulus ? "Sudah Lulus" : "Belum Lulus";
+                    $is_terpenuhi = $sempro_lulus;
                 }
 
                 $status_ikon = $is_terpenuhi ? 'v' : 'x';

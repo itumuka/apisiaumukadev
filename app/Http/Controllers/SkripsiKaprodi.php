@@ -90,9 +90,9 @@ class SkripsiKaprodi extends Controller
         DB::table('akd_skripsi_proposal')
             ->where('id', $proposal->id)
             ->update([
-                'tgl_ujian' => $request->tgl_ujian,
+                'tanggal_sempro' => $request->tgl_ujian,
                 'jam_ujian' => $request->jam_ujian,
-                'ruang_ujian' => $request->ruang_ujian,
+                'ruang' => $request->ruang_ujian,
                 'id_penguji1' => $request->id_penguji1,
                 'id_penguji2' => $request->id_penguji2,
                 'status' => 'disetujui',

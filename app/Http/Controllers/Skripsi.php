@@ -124,18 +124,33 @@ class Skripsi extends Controller
         $nama_file = "NASKAH_" . $request->fase . "_" . time() . "_" . $file->getClientOriginalName();
         $path = $file->storeAs("public/skripsi_naskah/{$nim}", $nama_file);
 
-        // Simpan ke akd_skripsi_proposal
-        $iterasi = DB::table('akd_skripsi_proposal')->where('id_skripsi', $skripsi->id)->max('iterasi') ?? 0;
-        $new_iterasi = $iterasi + 1;
-        $id_proposal = DB::table('akd_skripsi_proposal')->insertGetId([
-            'id_skripsi' => $skripsi->id,
-            'nim' => $nim,
-            'iterasi' => $new_iterasi,
-            'path_file_pdf' => $path,
-            'status' => 'draft',
-            'created_at' => now(),
-            'updated_at' => now()
-        ]);
+        // Simpan atau Perbarui akd_skripsi_proposal (Update jika sudah ada draft di iterasi terbaru)
+        $latestProposal = DB::table('akd_skripsi_proposal')
+            ->where('id_skripsi', $skripsi->id)
+            ->where('nim', $nim)
+            ->orderBy('iterasi', 'desc')
+            ->first();
+
+        if ($latestProposal && $latestProposal->status == 'draft') {
+            $id_proposal = $latestProposal->id;
+            $new_iterasi = $latestProposal->iterasi;
+            DB::table('akd_skripsi_proposal')->where('id', $id_proposal)->update([
+                'path_file_pdf' => $path,
+                'updated_at' => now()
+            ]);
+        } else {
+            $iterasi = $latestProposal->iterasi ?? 0;
+            $new_iterasi = $iterasi + 1;
+            $id_proposal = DB::table('akd_skripsi_proposal')->insertGetId([
+                'id_skripsi' => $skripsi->id,
+                'nim' => $nim,
+                'iterasi' => $new_iterasi,
+                'path_file_pdf' => $path,
+                'status' => 'draft',
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+        }
 
         // Jika fase ujian, hubungkan ke akd_skripsi_ujian
         if ($request->fase == 'ujian') {
@@ -224,7 +239,7 @@ class Skripsi extends Controller
             'tanggal' => 'required|date',
             'topik' => 'required',
             'uraian' => 'required',
-            'file_lampiran' => 'nullable|mimes:pdf,doc,docx|max:5120'
+            'file_lampiran' => 'nullable|mimes:pdf,doc,docx|max:5120' // Max 5MB
         ]);
 
         if ($v->fails()) return response()->json(['error' => $v->errors()], 422);

@@ -58,8 +58,8 @@ class Skripsi extends Controller
             $data['status'] = 'draft';
             DB::table('akd_skripsi')->insert($data);
         } else {
-            // Hanya bisa edit jika status draft/menunggu_pembimbing
-            if (!in_array($skripsi->status, ['draft', 'menunggu_pembimbing'])) {
+            // Hanya bisa edit jika status masih tahap awal/proses bimbingan
+            if (!in_array($skripsi->status, ['draft', 'menunggu_pembimbing', 'aktif'])) {
                 return response()->json(['error' => 'Proposal sudah diproses, tidak dapat diubah.'], 403);
             }
             DB::table('akd_skripsi')->where('nim', $request->nim)->update($data);
@@ -164,6 +164,52 @@ class Skripsi extends Controller
     }
 
     /**
+     * Hapus Naskah Draft Mahasiswa (Sempro/Ujian)
+     */
+    public function hapus_naskah(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'nim' => 'required',
+            'fase' => 'required|in:sempro,ujian'
+        ]);
+
+        if ($v->fails()) return response()->json(['error' => $v->errors()], 422);
+
+        $nim = $request->nim;
+        $skripsi = DB::table('akd_skripsi')->where('nim', $nim)->first();
+        if (!$skripsi) return response()->json(['error' => 'Data skripsi tidak ditemukan'], 404);
+
+        $proposal = DB::table('akd_skripsi_proposal')
+            ->where('id_skripsi', $skripsi->id)
+            ->where('nim', $nim)
+            ->orderBy('iterasi', 'desc')
+            ->first();
+
+        if (!$proposal) {
+            return response()->json(['error' => 'Data naskah tidak ditemukan'], 404);
+        }
+
+        if ($proposal->status !== 'draft') {
+            return response()->json(['error' => 'Naskah tidak dapat dihapus karena sudah diproses'], 403);
+        }
+
+        if (!$proposal->path_file_pdf) {
+            return response()->json(['error' => 'Tidak ada file naskah untuk dihapus'], 400);
+        }
+
+        if (Storage::exists($proposal->path_file_pdf)) {
+            Storage::delete($proposal->path_file_pdf);
+        }
+
+        DB::table('akd_skripsi_proposal')->where('id', $proposal->id)->update([
+            'path_file_pdf' => null,
+            'updated_at' => now()
+        ]);
+
+        return response()->json(['success' => 'Naskah berhasil dihapus']);
+    }
+
+    /**
      * Upload Berkas Persyaratan (Sertifikat, dll)
      */
     public function upload_berkas(Request $request)
@@ -191,6 +237,49 @@ class Skripsi extends Controller
         );
 
         return response()->json(['success' => 'Berkas berhasil diunggah']);
+    }
+
+    /**
+     * Ajukan Pendaftaran Seminar Proposal
+     */
+    public function ajukan_sempro(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'nim' => 'required'
+        ]);
+
+        if ($v->fails()) return response()->json(['error' => $v->errors()], 422);
+
+        $nim = $request->nim;
+        $skripsi = DB::table('akd_skripsi')->where('nim', $nim)->first();
+        if (!$skripsi) return response()->json(['error' => 'Data skripsi belum ada. Silakan simpan proposal terlebih dahulu.'], 400);
+
+        $proposal = DB::table('akd_skripsi_proposal')
+            ->where('id_skripsi', $skripsi->id)
+            ->where('nim', $nim)
+            ->orderBy('iterasi', 'desc')
+            ->first();
+
+        if (!$proposal) {
+            return response()->json(['error' => 'Data proposal belum ditemukan. Silakan unggah naskah terlebih dahulu.'], 422);
+        }
+
+        if (!$proposal->path_file_pdf) {
+            return response()->json(['error' => 'Naskah proposal belum diunggah.'], 422);
+        }
+
+        if (in_array($proposal->status, ['diajukan', 'dijadwalkan', 'lulus'])) {
+            return response()->json(['error' => 'Pendaftaran seminar proposal sudah diajukan sebelumnya.'], 409);
+        }
+
+        DB::table('akd_skripsi_proposal')
+            ->where('id', $proposal->id)
+            ->update([
+                'status' => 'diajukan',
+                'updated_at' => now()
+            ]);
+
+        return response()->json(['success' => 'Pendaftaran seminar proposal berhasil diajukan.']);
     }
 
     /**
@@ -223,7 +312,8 @@ class Skripsi extends Controller
 
         $logs = DB::table('akd_skripsi_bimbingan')
             ->where('id_skripsi', $skripsi->id)
-            ->orderBy('tanggal', 'desc')
+            ->orderBy('tanggal', 'asc')
+            ->orderBy('id', 'asc')
             ->get();
 
         return response()->json(['status' => 'success', 'data' => $logs]);

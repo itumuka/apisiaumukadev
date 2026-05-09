@@ -1226,12 +1226,23 @@ class Akademik extends Controller
         }
 
         try {
+            $isExists = DB::table('akd_program_studi')
+                ->where('id_program_studi', $request->id_program_studi)
+                ->exists();
+
+            if (!$isExists) {
+                return response()->json(['error' => 'Data program studi tidak ditemukan'], 404);
+            }
+
             $edit_programstudi = $this->akademik->edit_programstudi($request);
 
             if ($edit_programstudi) {
                 return response()->json(['success' => 'Data berhasil diubah !']);
             } else {
-                return response()->json(['error' => 'Tidak ada data yang diubah'], 400);
+                return response()->json([
+                    'success' => 'Tidak ada perubahan data',
+                    'info' => 'Data yang dikirim sama dengan data saat ini'
+                ]);
             }
         } catch (\Exception $e) {
             return response()->json(['error' => 'Terjadi kesalahan: ' . $e->getMessage()], 500);

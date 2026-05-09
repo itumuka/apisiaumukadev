@@ -397,6 +397,8 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::get("/mahasiswa/skripsi/cek-kelayakan", "Skripsi@cek_kelayakan")->name('skripsi_cek_kelayakan');
     Route::post("/mahasiswa/skripsi/simpan-proposal", "Skripsi@simpan_proposal")->name('skripsi_simpan_proposal');
     Route::post("/mahasiswa/skripsi/upload-naskah", "Skripsi@upload_naskah")->name('skripsi_upload_naskah');
+    Route::post("/mahasiswa/skripsi/ajukan-sempro", "Skripsi@ajukan_sempro")->name('skripsi_ajukan_sempro');
+    Route::post("/mahasiswa/skripsi/hapus-naskah", "Skripsi@hapus_naskah")->name('skripsi_hapus_naskah');
     Route::post("/mahasiswa/skripsi/upload-berkas", "Skripsi@upload_berkas")->name('skripsi_upload_berkas');
     Route::get("/mahasiswa/skripsi/log-bimbingan", "Skripsi@log_bimbingan")->name('skripsi_mhs_log_bimbingan');
     Route::post("/mahasiswa/skripsi/tambah-bimbingan", "Skripsi@tambah_bimbingan")->name('skripsi_mhs_tambah_bimbingan');

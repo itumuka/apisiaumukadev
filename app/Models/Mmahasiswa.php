@@ -1092,7 +1092,8 @@ class Mmahasiswa extends Model
     public function tampilstatuspembayaranriwayat(Request $request)
     {
         $nim = $request->nim;
-        $sttpem = DB::select("SELECT * FROM keu_bayar a JOIN keu_tagihan b ON a.id_tagihan=b.id_tagihan WHERE nim='$nim'");
+        $sttpem = DB::select("SELECT b.tahun,b.semester,b.nama_biaya,a.bayar,a.id_bayar,a.created_at,(SELECT nim FROM keu_virtual_akun WHERE kode=b.kode_biling) AS kodeva FROM keu_bayar a JOIN keu_tagihan b ON a.id_tagihan=b.id_tagihan WHERE nim='$nim'");
+        // $sttpem = DB::select("SELECT * FROM keu_bayar a JOIN keu_tagihan b ON a.id_tagihan=b.id_tagihan WHERE nim='$nim'");
 
         return $sttpem;
     }

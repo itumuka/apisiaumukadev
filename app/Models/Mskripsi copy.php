@@ -20,12 +20,6 @@ class Mskripsi extends Model
             ->select('akd_mahasiswa.nim', 'akd_mahasiswa.kode_program_studi', 'akd_program_studi.kode_jenjang_pendidikan', 'akd_mahasiswa.status_mhs')
             ->where('nim', $nim)->first();
 
-        $skripsi = DB::table('akd_skripsi')->where('nim', $nim)->first();
-        $flag_pkkmb = $this->getSkripsiFlag($skripsi, 'is_pkkmb');
-        $flag_kkn = $this->getSkripsiFlag($skripsi, 'is_kkn');
-        $flag_pkpm = $this->getSkripsiFlag($skripsi, 'is_pkpm');
-        $min_bimbingan_ujian = 8;
-
         if (!$mhs) return ['error' => 'Mahasiswa tidak ditemukan'];
 
         // 2. Get Program Studi Configuration
@@ -51,14 +45,6 @@ class Mskripsi extends Model
         $ipk = $stats['ipk'];
         $total_sks = $stats['total_sks'];
         $total_e = $stats['total_e'];
-        $total_bimbingan_valid = 0;
-
-        if (in_array($fase, ['sempro', 'ujian']) && $prodiConfig) {
-            $total_bimbingan_valid = DB::table('akd_skripsi_bimbingan')
-                ->where('nim', $nim)
-                ->whereIn('status', ['disetujui', 'revisi'])
-                ->count();
-        }
         
         // If no syarat from table, create from prodi config
         if ($syaratList->isEmpty() && $prodiConfig) {
@@ -101,15 +87,15 @@ class Mskripsi extends Model
                 ];
             }
             
-            // 3. Grade requirement (no D/E)
+            // 3. Grade requirement (no D/E/K)
             $is_terpenuhi = $total_e == 0;
             if (!$is_terpenuhi) $semua_lolos = false;
             
             $hasil[] = [
                 'no' => $index++,
                 'id_syarat_prodi' => null,
-                'syarat' => 'Bebas Nilai D/E',
-                'isi' => $total_e . ' matakuliah dengan nilai D/E',
+                'syarat' => 'Bebas Nilai D/E/K',
+                'isi' => $total_e . ' matakuliah dengan nilai D/E/K',
                 'hubungi' => 'Bagian Akademik',
                 'status' => $is_terpenuhi ? 'v' : 'x',
                 'jenis' => 'sistem',
@@ -118,26 +104,7 @@ class Mskripsi extends Model
                 'kode_syarat' => 'BEBAS_E'
             ];
             
-            // 4. Bimbingan requirement for Seminar Proposal
-            if ($fase == 'sempro' && $prodiConfig->ta_minimal_bimbingan) {
-                $bimbingan_lolos = $total_bimbingan_valid >= $prodiConfig->ta_minimal_bimbingan;
-                if (!$bimbingan_lolos) $semua_lolos = false;
-
-                $hasil[] = [
-                    'no' => $index++,
-                    'id_syarat_prodi' => null,
-                    'syarat' => 'Jumlah Log Bimbingan Tervalidasi',
-                    'isi' => $total_bimbingan_valid . ' / ' . $prodiConfig->ta_minimal_bimbingan . ' log bimbingan tervalidasi (ACC/Revisi)',
-                    'hubungi' => 'Dosen Pembimbing',
-                    'status' => $bimbingan_lolos ? 'v' : 'x',
-                    'jenis' => 'sistem',
-                    'is_wajib' => 1,
-                    'tipe_upload' => null,
-                    'kode_syarat' => 'BIMBINGAN_ACC'
-                ];
-            }
-
-            // 5. Payment requirement based on phase
+            // 4. Payment requirement based on phase
             if ($fase == 'sempro' && $prodiConfig->ta_komponen_bayar) {
                 $bayar_ta = DB::table('keu_tagihan')
                     ->where('nim', $nim)
@@ -158,90 +125,6 @@ class Mskripsi extends Model
                     'is_wajib' => 1,
                     'tipe_upload' => null,
                     'kode_syarat' => 'BAYAR_SEMPRO'
-                ];
-            }
-
-            if ($fase == 'sempro') {
-                $sempro_acc = $skripsi && strtolower((string) ($skripsi->fase_aktif ?? '')) === 'sempro';
-                if (!$sempro_acc) $semua_lolos = false;
-
-                $hasil[] = [
-                    'no' => $index++,
-                    'id_syarat_prodi' => null,
-                    'syarat' => 'ACC Sempro Pembimbing',
-                    'isi' => $sempro_acc ? 'Sudah ACC' : 'Belum ACC',
-                    'hubungi' => 'Dosen Pembimbing',
-                    'status' => $sempro_acc ? 'v' : 'x',
-                    'jenis' => 'sistem',
-                    'is_wajib' => 1,
-                    'tipe_upload' => null,
-                    'kode_syarat' => 'ACC_SEMPRO'
-                ];
-            }
-
-            if ($fase == 'ujian') {
-                $pkkmb_lolos = $flag_pkkmb === 1;
-                if (!$pkkmb_lolos) $semua_lolos = false;
-
-                $hasil[] = [
-                    'no' => $index++,
-                    'id_syarat_prodi' => null,
-                    'syarat' => 'Lulus PKKMB',
-                    'isi' => $pkkmb_lolos ? 'Sudah Lulus' : 'Belum Lulus',
-                    'hubungi' => 'Bagian Akademik',
-                    'status' => $pkkmb_lolos ? 'v' : 'x',
-                    'jenis' => 'sistem',
-                    'is_wajib' => 1,
-                    'tipe_upload' => null,
-                    'kode_syarat' => 'PKKMB'
-                ];
-
-                $kkn_lolos = $flag_kkn === 1;
-                if (!$kkn_lolos) $semua_lolos = false;
-
-                $hasil[] = [
-                    'no' => $index++,
-                    'id_syarat_prodi' => null,
-                    'syarat' => 'Lulus KKN',
-                    'isi' => $kkn_lolos ? 'Sudah Lulus' : 'Belum Lulus',
-                    'hubungi' => 'Bagian Akademik',
-                    'status' => $kkn_lolos ? 'v' : 'x',
-                    'jenis' => 'sistem',
-                    'is_wajib' => 1,
-                    'tipe_upload' => null,
-                    'kode_syarat' => 'KKN'
-                ];
-
-                $pkpm_lolos = $flag_pkpm === 1;
-                if (!$pkpm_lolos) $semua_lolos = false;
-
-                $hasil[] = [
-                    'no' => $index++,
-                    'id_syarat_prodi' => null,
-                    'syarat' => 'Lulus PKPM',
-                    'isi' => $pkpm_lolos ? 'Sudah Lulus' : 'Belum Lulus',
-                    'hubungi' => 'Bagian Akademik',
-                    'status' => $pkpm_lolos ? 'v' : 'x',
-                    'jenis' => 'sistem',
-                    'is_wajib' => 1,
-                    'tipe_upload' => null,
-                    'kode_syarat' => 'PKPM'
-                ];
-
-                $bimbingan_ujian_lolos = $total_bimbingan_valid >= $min_bimbingan_ujian;
-                if (!$bimbingan_ujian_lolos) $semua_lolos = false;
-
-                $hasil[] = [
-                    'no' => $index++,
-                    'id_syarat_prodi' => null,
-                    'syarat' => 'Jumlah Log Bimbingan Tervalidasi',
-                    'isi' => $total_bimbingan_valid . ' / ' . $min_bimbingan_ujian . ' log bimbingan tervalidasi (ACC/Revisi)',
-                    'hubungi' => 'Dosen Pembimbing',
-                    'status' => $bimbingan_ujian_lolos ? 'v' : 'x',
-                    'jenis' => 'sistem',
-                    'is_wajib' => 1,
-                    'tipe_upload' => null,
-                    'kode_syarat' => 'BIMBINGAN_8X'
                 ];
             }
             
@@ -268,7 +151,7 @@ class Mskripsi extends Model
                 ];
             }
 
-            // 6. Seminar Proposal Requirement (if enabled by prodi)
+            // 5. Seminar Proposal Requirement (if enabled by prodi)
             if ($fase == 'ujian' && $prodiConfig->ta_ada_sempro != 0) {
                 $sempro_lulus = DB::table('akd_skripsi_proposal as p')
                     ->join('akd_skripsi as s', 'p.id_skripsi', '=', 's.id')
@@ -337,50 +220,6 @@ class Mskripsi extends Model
                     $isi_aktual = $sempro_lulus ? "Sudah Lulus" : "Belum Lulus";
                     $is_terpenuhi = $sempro_lulus;
                 }
-                else if ($rule->kode_syarat == 'BIMBINGAN_ACC') {
-                    $bimbingan_valid = DB::table('akd_skripsi_bimbingan')
-                        ->where('nim', $nim)
-                        ->whereIn('status', ['disetujui', 'revisi'])
-                        ->count();
-                    $target_bimbingan = is_numeric($rule->nilai_target) ? (float)$rule->nilai_target : ($fase == 'ujian' ? 8 : (float) ($prodiConfig->ta_minimal_bimbingan ?? 0));
-                    if ($target_bimbingan <= 0) {
-                        $target_bimbingan = ($fase == 'ujian') ? 8 : 1;
-                    }
-                    $operator = $rule->operator ?: '>=';
-                    $isi_aktual = $bimbingan_valid . ' / ' . $target_bimbingan . ' Log Bimbingan Tervalidasi (ACC/Revisi)';
-                    $is_terpenuhi = $this->compareValue($bimbingan_valid, $operator, $target_bimbingan);
-                }
-                else if ($rule->kode_syarat == 'BIMBINGAN_8X') {
-                    $bimbingan_valid = DB::table('akd_skripsi_bimbingan')
-                        ->where('nim', $nim)
-                        ->whereIn('status', ['disetujui', 'revisi'])
-                        ->count();
-                    $isi_aktual = $bimbingan_valid . ' / 8 Log Bimbingan Tervalidasi (ACC/Revisi)';
-                    $is_terpenuhi = $bimbingan_valid >= 8;
-                }
-                else if ($rule->kode_syarat == 'PKKMB') {
-                    $target_flag = is_numeric($rule->nilai_target) ? (float)$rule->nilai_target : 1;
-                    $operator = $rule->operator ?: '>=';
-                    $isi_aktual = $flag_pkkmb == 1 ? 'Sudah Lulus' : 'Belum Lulus';
-                    $is_terpenuhi = $this->compareValue($flag_pkkmb, $operator, $target_flag);
-                }
-                else if ($rule->kode_syarat == 'KKN') {
-                    $target_flag = is_numeric($rule->nilai_target) ? (float)$rule->nilai_target : 1;
-                    $operator = $rule->operator ?: '>=';
-                    $isi_aktual = $flag_kkn == 1 ? 'Sudah Lulus' : 'Belum Lulus';
-                    $is_terpenuhi = $this->compareValue($flag_kkn, $operator, $target_flag);
-                }
-                else if ($rule->kode_syarat == 'PKPM') {
-                    $target_flag = is_numeric($rule->nilai_target) ? (float)$rule->nilai_target : 1;
-                    $operator = $rule->operator ?: '>=';
-                    $isi_aktual = $flag_pkpm == 1 ? 'Sudah Lulus' : 'Belum Lulus';
-                    $is_terpenuhi = $this->compareValue($flag_pkpm, $operator, $target_flag);
-                }
-                else if ($rule->kode_syarat == 'ACC_SEMPRO') {
-                    $sempro_acc = $skripsi && strtolower((string) ($skripsi->fase_aktif ?? '')) === 'sempro';
-                    $isi_aktual = $sempro_acc ? 'Sudah ACC' : 'Belum ACC';
-                    $is_terpenuhi = $sempro_acc;
-                }
 
                 $status_ikon = $is_terpenuhi ? 'v' : 'x';
             }
@@ -434,87 +273,8 @@ class Mskripsi extends Model
                 'status' => $status_ikon,
                 'jenis' => $rule->jenis,
                 'is_wajib' => $rule->is_wajib,
-                'tipe_upload' => $rule->tipe_upload,
-                'kode_syarat' => $rule->kode_syarat
+                'tipe_upload' => $rule->tipe_upload
             ];
-        }
-
-        if ($fase == 'ujian') {
-            $kodeSyaratProdi = $syaratList->pluck('kode_syarat')->map(function ($kode) {
-                return strtoupper((string) $kode);
-            })->all();
-
-            if (!in_array('PKKMB', $kodeSyaratProdi)) {
-                $pkkmb_lolos = $flag_pkkmb === 1;
-                if (!$pkkmb_lolos) $semua_lolos = false;
-
-                $hasil[] = [
-                    'no' => $index++,
-                    'id_syarat_prodi' => null,
-                    'syarat' => 'Lulus PKKMB',
-                    'isi' => $pkkmb_lolos ? 'Sudah Lulus' : 'Belum Lulus',
-                    'hubungi' => 'Bagian Akademik',
-                    'status' => $pkkmb_lolos ? 'v' : 'x',
-                    'jenis' => 'sistem',
-                    'is_wajib' => 1,
-                    'tipe_upload' => null,
-                    'kode_syarat' => 'PKKMB'
-                ];
-            }
-
-            if (!in_array('KKN', $kodeSyaratProdi)) {
-                $kkn_lolos = $flag_kkn === 1;
-                if (!$kkn_lolos) $semua_lolos = false;
-
-                $hasil[] = [
-                    'no' => $index++,
-                    'id_syarat_prodi' => null,
-                    'syarat' => 'Lulus KKN',
-                    'isi' => $kkn_lolos ? 'Sudah Lulus' : 'Belum Lulus',
-                    'hubungi' => 'Bagian Akademik',
-                    'status' => $kkn_lolos ? 'v' : 'x',
-                    'jenis' => 'sistem',
-                    'is_wajib' => 1,
-                    'tipe_upload' => null,
-                    'kode_syarat' => 'KKN'
-                ];
-            }
-
-            if (!in_array('PKPM', $kodeSyaratProdi)) {
-                $pkpm_lolos = $flag_pkpm === 1;
-                if (!$pkpm_lolos) $semua_lolos = false;
-
-                $hasil[] = [
-                    'no' => $index++,
-                    'id_syarat_prodi' => null,
-                    'syarat' => 'Lulus PKPM',
-                    'isi' => $pkpm_lolos ? 'Sudah Lulus' : 'Belum Lulus',
-                    'hubungi' => 'Bagian Akademik',
-                    'status' => $pkpm_lolos ? 'v' : 'x',
-                    'jenis' => 'sistem',
-                    'is_wajib' => 1,
-                    'tipe_upload' => null,
-                    'kode_syarat' => 'PKPM'
-                ];
-            }
-
-            if (!in_array('BIMBINGAN_8X', $kodeSyaratProdi) && !in_array('BIMBINGAN_ACC', $kodeSyaratProdi)) {
-                $bimbingan_ujian_lolos = $total_bimbingan_valid >= $min_bimbingan_ujian;
-                if (!$bimbingan_ujian_lolos) $semua_lolos = false;
-
-                $hasil[] = [
-                    'no' => $index++,
-                    'id_syarat_prodi' => null,
-                    'syarat' => 'Jumlah Log Bimbingan Tervalidasi',
-                    'isi' => $total_bimbingan_valid . ' / ' . $min_bimbingan_ujian . ' log bimbingan tervalidasi (ACC/Revisi)',
-                    'hubungi' => 'Dosen Pembimbing',
-                    'status' => $bimbingan_ujian_lolos ? 'v' : 'x',
-                    'jenis' => 'sistem',
-                    'is_wajib' => 1,
-                    'tipe_upload' => null,
-                    'kode_syarat' => 'BIMBINGAN_8X'
-                ];
-            }
         }
 
         return [
@@ -567,7 +327,7 @@ class Mskripsi extends Model
 
         // 5. Data Sempro & Bimbingan
         $sempro = $skripsi ? DB::table('akd_skripsi_proposal')->where('id_skripsi', $skripsi->id)->where('nim', $nim)->orderBy('iterasi', 'desc')->first() : null;
-        $total_bimbingan = $skripsi ? DB::table('akd_skripsi_bimbingan')->where('id_skripsi', $skripsi->id)->whereIn('status', ['disetujui', 'revisi'])->count() : 0;
+        $total_bimbingan = $skripsi ? DB::table('akd_skripsi_bimbingan')->where('id_skripsi', $skripsi->id)->where('status', 'disetujui')->count() : 0;
         $ujian = $skripsi ? DB::table('akd_skripsi_ujian')->where('id_skripsi', $skripsi->id)->first() : null;
 
         // 6. Logika CTA
@@ -605,12 +365,11 @@ class Mskripsi extends Model
     private function getAcademicStats($nim)
     {
         $transkrip = collect(DB::select("
-             SELECT mk.sks_matakuliah, MIN(akd_transkrip.nilai) as nilai, MAX(p.mutu) as mutu
+            SELECT mk.sks_matakuliah, akd_transkrip.nilai, p.mutu
             FROM akd_transkrip
             JOIN akd_matakuliah mk ON mk.id_matakuliah = akd_transkrip.id_matakuliah 
             JOIN akd_predikat_nilai_huruf p ON akd_transkrip.nilai = p.nilai_huruf_akhir 
             WHERE akd_transkrip.nim = '$nim'
-            GROUP BY akd_transkrip.id_matakuliah
         "));
 
         $total_sks = $transkrip->sum('sks_matakuliah');
@@ -621,7 +380,7 @@ class Mskripsi extends Model
         return [
             'ipk' => $total_sks > 0 ? round($total_mutu / $total_sks, 2) : 0,
             'total_sks' => $total_sks,
-            'total_e' => $transkrip->whereIn('nilai', ['D', 'E'])->count()
+            'total_e' => $transkrip->whereIn('nilai', ['D', 'E', 'K'])->count()
         ];
     }
 
@@ -640,8 +399,6 @@ class Mskripsi extends Model
 
     private function calculateCTA($mhs, $bayar_ta, $skripsi, $sempro, $total_bimbingan, $bayar_ujian, $ujian, $stats)
     {
-        $min_bimbingan_ujian = 8;
-
         if (!$bayar_ta) {
             return ['label' => 'Lunasi Pembayaran ' . $mhs->ta_nama_tugas_akhir, 'url' => 'mahasiswa/statuspembayaran', 'warna' => 'warning', 'disabled' => false];
         }
@@ -659,14 +416,6 @@ class Mskripsi extends Model
             return ['label' => 'Menunggu Ploting Pembimbing oleh Kaprodi', 'url' => '#', 'warna' => 'secondary', 'disabled' => true];
         }
 
-        if ($skripsi->fase_aktif == 'bimbingan' && $total_bimbingan < $mhs->ta_minimal_bimbingan) {
-            return ['label' => 'Tambah Log Bimbingan (' . $total_bimbingan . '/' . $mhs->ta_minimal_bimbingan . ')', 'url' => 'skripsi/bimbingan', 'warna' => 'warning', 'disabled' => false];
-        }
-
-        if ($mhs->ta_ada_sempro && $skripsi && strtolower((string) ($skripsi->fase_aktif ?? '')) !== 'sempro') {
-            return ['label' => 'Menunggu ACC Sempro Pembimbing', 'url' => '#', 'warna' => 'secondary', 'disabled' => true];
-        }
-
         if ($mhs->ta_ada_sempro && (!$sempro || $sempro->status == 'draft')) {
             return ['label' => 'Daftar Seminar Proposal', 'url' => 'skripsi/seminar', 'warna' => 'warning', 'disabled' => false];
         }
@@ -675,11 +424,15 @@ class Mskripsi extends Model
             return ['label' => 'Menunggu Jadwal & Validasi Sempro', 'url' => '#', 'warna' => 'secondary', 'disabled' => true];
         }
 
-        if ($total_bimbingan >= $min_bimbingan_ujian && !$bayar_ujian) {
+        if ($skripsi->fase_aktif == 'bimbingan' && $total_bimbingan < $mhs->ta_minimal_bimbingan) {
+            return ['label' => 'Tambah Log Bimbingan (' . $total_bimbingan . '/' . $mhs->ta_minimal_bimbingan . ')', 'url' => 'skripsi/bimbingan', 'warna' => 'warning', 'disabled' => false];
+        }
+
+        if ($total_bimbingan >= $mhs->ta_minimal_bimbingan && !$bayar_ujian) {
             return ['label' => 'Bimbingan Selesai! Lunasi Biaya Ujian', 'url' => 'mahasiswa/statuspembayaran', 'warna' => 'warning', 'disabled' => false];
         }
 
-        if ($total_bimbingan >= $min_bimbingan_ujian && $bayar_ujian && (!$ujian || $ujian->status == 'pending')) {
+        if ($total_bimbingan >= $mhs->ta_minimal_bimbingan && $bayar_ujian && (!$ujian || $ujian->status == 'pending')) {
             return ['label' => 'Daftar Ujian Sidang Akhir', 'url' => 'skripsi/ujian', 'warna' => 'warning', 'disabled' => false];
         }
 
@@ -705,21 +458,12 @@ class Mskripsi extends Model
         }
     }
 
-    private function getSkripsiFlag($skripsi, $field)
-    {
-        if (!$skripsi || !is_object($skripsi) || !property_exists($skripsi, $field)) {
-            return 0;
-        }
-
-        return (int) $skripsi->{$field} === 1 ? 1 : 0;
-    }
-
     /**
      * Data Mahasiswa Bimbingan untuk Dosen
      */
-    public function getMahasiswaBimbingan($id_dosen, $tahun = null, $semester = null)
+    public function getMahasiswaBimbingan($id_dosen)
     {
-        $query = DB::table('akd_skripsi as s')
+        $mahasiswa = DB::table('akd_skripsi as s')
             ->join('akd_mahasiswa as m', 's.nim', '=', 'm.nim')
             ->join('akd_program_studi as p', 'm.kode_program_studi', '=', 'p.kode_program_studi')
             ->select(
@@ -727,30 +471,23 @@ class Mskripsi extends Model
                 's.nim',
                 'm.nama_mahasiswa',
                 'p.nama_program_studi',
-                'p.ta_minimal_bimbingan as ta_minimal_bimbingan',
                 's.judul',
                 's.topik',
                 's.status as status_skripsi',
                 's.fase_aktif',
                 's.id_dosen_pembimbing1',
                 's.id_dosen_pembimbing2',
-                DB::raw("(SELECT COUNT(id) FROM akd_skripsi_bimbingan b WHERE b.id_skripsi = s.id AND b.status IN ('disetujui', 'revisi')) as total_bimbingan_acc")
+                DB::raw("(SELECT COUNT(id) FROM akd_skripsi_bimbingan b WHERE b.id_skripsi = s.id AND b.status = 'disetujui') as total_bimbingan_acc")
             )
             ->where(function ($query) use ($id_dosen) {
                 $query->where('s.id_dosen_pembimbing1', $id_dosen)
                     ->orWhere('s.id_dosen_pembimbing2', $id_dosen);
             })
-            ->whereNotIn('s.status', ['draft', 'menunggu_pembimbing']);
+            ->whereNotIn('s.status', ['draft', 'menunggu_pembimbing'])
+            ->orderBy('s.updated_at', 'desc')
+            ->get();
 
-        if ($tahun && $semester) {
-            $query->join('akd_heregistrasi as r', function($join) use ($tahun, $semester) {
-                $join->on('m.nim', '=', 'r.nim')
-                     ->where('r.tahun', '=', $tahun)
-                     ->where('r.semester', '=', $semester);
-            });
-        }
-
-        return $query->orderBy('s.updated_at', 'desc')->get();
+        return $mahasiswa;
     }
 
     /**
@@ -764,8 +501,7 @@ class Mskripsi extends Model
         $logs = DB::table('akd_skripsi_bimbingan')
             ->where('id_skripsi', $id_skripsi)
             // ->where('dosen_tujuan', $id_dosen) // Uncomment jika skema memiliki target dosen
-            ->orderBy('tanggal', 'asc')
-            ->orderBy('id', 'asc')
+            ->orderBy('tanggal', 'desc')
             ->get();
 
         return $logs;

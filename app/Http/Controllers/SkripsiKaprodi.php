@@ -318,4 +318,84 @@ class SkripsiKaprodi extends Controller
             'mahasiswa' => $mahasiswa
         ]);
     }
-}
+
+    /**
+     * Konfigurasi Sempro Per Prodi
+     */
+    public function get_config_sempro($kode_prodi)
+    {
+        $prodi = DB::table('akd_program_studi')
+            ->where('kode_program_studi', $kode_prodi)
+            ->select('kode_program_studi', 'nama_program_studi', 'ta_sempro_skema')
+            ->first();
+
+        if (!$prodi) return response()->json(['error' => 'Prodi tidak ditemukan'], 404);
+
+        $mapped_mk = DB::table('akd_skripsi_sempro_mk as m')
+            ->join('akd_matakuliah as mk', 'm.id_matakuliah', '=', 'mk.id_matakuliah')
+            ->where('m.kode_prodi', $kode_prodi)
+            ->select('mk.id_matakuliah', 'mk.kode_matakuliah', 'mk.nama_matakuliah')
+            ->get();
+
+        return response()->json([
+            'prodi' => $prodi,
+            'mapped_matakuliah' => $mapped_mk
+        ]);
+    }
+
+    public function update_config_sempro(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'kode_prodi' => 'required',
+            'ta_sempro_skema' => 'required|in:skripsi,matakuliah',
+            'id_matakuliah' => 'nullable|array'
+        ]);
+
+        if ($v->fails()) return response()->json(['error' => $v->errors()], 422);
+
+        DB::beginTransaction();
+        try {
+            // 1. Update Skema
+            DB::table('akd_program_studi')
+                ->where('kode_program_studi', $request->kode_prodi)
+                ->update(['ta_sempro_skema' => $request->ta_sempro_skema]);
+
+            // 2. Sync Matakuliah if skema is matakuliah
+            DB::table('akd_skripsi_sempro_mk')->where('kode_prodi', $request->kode_prodi)->delete();
+            
+            if ($request->ta_sempro_skema == 'matakuliah' && $request->id_matakuliah) {
+                foreach ($request->id_matakuliah as $id_mk) {
+                    DB::table('akd_skripsi_sempro_mk')->insert([
+                        'kode_prodi' => $request->kode_prodi,
+                        'id_matakuliah' => $id_mk,
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]);
+                }
+            }
+
+            DB::commit();
+            return response()->json(['success' => 'Konfigurasi Sempro berhasil diperbarui']);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function search_matakuliah(Request $request)
+    {
+        $search = $request->search;
+        $kode_prodi = $request->kode_prodi;
+
+        $query = DB::table('akd_matakuliah')
+            ->where('kode_program_studi', $kode_prodi)
+            ->where(function($q) use ($search) {
+                $q->where('nama_matakuliah', 'like', "%$search%")
+                  ->orWhere('kode_matakuliah', 'like', "%$search%");
+            })
+            ->limit(20)
+            ->get();
+
+        return response()->json($query);
+    }
+}

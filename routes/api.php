@@ -397,6 +397,8 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::get("/mahasiswa/skripsi/cek-kelayakan", "Skripsi@cek_kelayakan")->name('skripsi_cek_kelayakan');
     Route::post("/mahasiswa/skripsi/simpan-proposal", "Skripsi@simpan_proposal")->name('skripsi_simpan_proposal');
     Route::post("/mahasiswa/skripsi/upload-naskah", "Skripsi@upload_naskah")->name('skripsi_upload_naskah');
+    Route::post("/mahasiswa/skripsi/ajukan-sempro", "Skripsi@ajukan_sempro")->name('skripsi_ajukan_sempro');
+    Route::post("/mahasiswa/skripsi/hapus-naskah", "Skripsi@hapus_naskah")->name('skripsi_hapus_naskah');
     Route::post("/mahasiswa/skripsi/upload-berkas", "Skripsi@upload_berkas")->name('skripsi_upload_berkas');
     Route::get("/mahasiswa/skripsi/log-bimbingan", "Skripsi@log_bimbingan")->name('skripsi_mhs_log_bimbingan');
     Route::post("/mahasiswa/skripsi/tambah-bimbingan", "Skripsi@tambah_bimbingan")->name('skripsi_mhs_tambah_bimbingan');
@@ -412,6 +414,11 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::post("/kaprodi/skripsi/issue-sk-kolektif", "SkripsiKaprodi@simpan_sk_kolektif")->name('skripsi_issue_sk_kolektif');
     Route::get("/kaprodi/skripsi/list-sk-terbit", "SkripsiKaprodi@list_sk_terbit")->name('skripsi_list_sk_terbit');
     Route::get("/kaprodi/skripsi/get-sk-detail/{id}", "SkripsiKaprodi@get_sk_detail")->name('skripsi_get_sk_detail');
+    
+    // Konfigurasi Sempro
+    Route::get("/kaprodi/skripsi/config-sempro/{kode_prodi}", "SkripsiKaprodi@get_config_sempro")->name('skripsi_kaprodi_get_config_sempro');
+    Route::post("/kaprodi/skripsi/update-config-sempro", "SkripsiKaprodi@update_config_sempro")->name('skripsi_kaprodi_update_config_sempro');
+    Route::get("/kaprodi/skripsi/search-matakuliah", "SkripsiKaprodi@search_matakuliah")->name('skripsi_kaprodi_search_matakuliah');
 
      // Modul Skripsi Dosen Pembimbing
     Route::get("/dosen/skripsi/dashboard", "SkripsiDosen@dashboard")->name('skripsi_dosen_dashboard');

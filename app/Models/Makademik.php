@@ -1740,8 +1740,12 @@ TIME_FORMAT(jam_mulai, '%H:%i') AS jam_mulai, TIME_FORMAT(jam_selesai, '%H:%i') 
             $updateData['ta_komponen_bayar'] = $request->eta_komponen_bayar;
         }
         
-        if (in_array('ta_minimal_bimbingan', $existingColumns) && $request->has('eta_minimal_bimbingan') && $request->eta_minimal_bimbingan !== null) {
-            $updateData['ta_minimal_bimbingan'] = $request->eta_minimal_bimbingan;
+        if ($request->has('eta_minimal_bimbingan') && $request->eta_minimal_bimbingan !== null) {
+            if (in_array('ta_minimal_bimbingan', $existingColumns)) {
+                $updateData['ta_minimal_bimbingan'] = $request->eta_minimal_bimbingan;
+            } elseif (in_array('ta_min_bimbingan', $existingColumns)) {
+                $updateData['ta_min_bimbingan'] = $request->eta_minimal_bimbingan;
+            }
         }
         
         $editprogramstudi = DB::table('akd_program_studi')

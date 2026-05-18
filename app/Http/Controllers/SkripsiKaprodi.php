@@ -139,15 +139,19 @@ class SkripsiKaprodi extends Controller
         return response()->json(['success' => 'Jadwal Ujian Akhir berhasil diplot']);
     }
 
-     public function list_siap_sk(Request $request)
+    public function list_siap_sk(Request $request)
     {
         $kode_prodi = $request->kode_prodi;
         $angkatan = $request->angkatan;
+        $tahun_aktif = $request->tahun;
+        $semester_aktif = $request->semester == 1 ? 'Gasal' : 'Genap';
+
         $query = DB::table('akd_mahasiswa as m')
             ->join('akd_skripsi as s', 'm.nim', '=', 's.nim')
             ->join('akd_program_studi as ps', 'm.kode_program_studi', '=', 'ps.kode_program_studi')
             ->leftJoin('simpeg_pegawai as p1', 's.id_dosen_pembimbing1', '=', 'p1.id')
             ->leftJoin('simpeg_pegawai as p2', 's.id_dosen_pembimbing2', '=', 'p2.id')
+            ->leftJoin('akd_skripsi_sk as sk', 's.id_sk_pembimbing', '=', 'sk.id')
             ->select(
                 'm.nim',
                 'm.nama_mahasiswa as nama_mhs',
@@ -157,14 +161,25 @@ class SkripsiKaprodi extends Controller
                 's.id_dosen_pembimbing1',
                 's.id_dosen_pembimbing2',
                 DB::raw("CONCAT_WS(' ', p1.gelar_depan, p1.nama, p1.gelar_belakang) as nama_pembimbing1"),
-                DB::raw("CONCAT_WS(' ', p2.gelar_depan, p2.nama, p2.gelar_belakang) as nama_pembimbing2")
+                DB::raw("CONCAT_WS(' ', p2.gelar_depan, p2.nama, p2.gelar_belakang) as nama_pembimbing2"),
+                DB::raw("CASE WHEN s.id_sk_pembimbing IS NOT NULL THEN 'perpanjangan' ELSE 'baru' END as status_sk")
             )
             ->where(function ($q) use ($kode_prodi) {
                 $q->where('m.kode_program_studi', $kode_prodi)
                     ->orWhere('ps.kode_fakultas', $kode_prodi);
             })
             ->whereNotNull('s.id_dosen_pembimbing1')
-            ->whereNull('s.id_sk_pembimbing');
+            ->where('s.status', '!=', 'lulus')
+            ->where(function($q) use ($tahun_aktif, $semester_aktif) {
+                $q->whereNull('s.id_sk_pembimbing')
+                  ->orWhere(function($subq) use ($tahun_aktif, $semester_aktif) {
+                      $subq->whereNotNull('s.id_sk_pembimbing')
+                           ->where(function($qq) use ($tahun_aktif, $semester_aktif) {
+                               $qq->where('sk.tahun_akademik', '!=', $tahun_aktif)
+                                  ->orWhere('sk.semester', '!=', $semester_aktif);
+                           });
+                  });
+            });
 
         if ($angkatan) {
             $query->where('m.tahun_angkatan', $angkatan);
@@ -209,6 +224,18 @@ class SkripsiKaprodi extends Controller
                     'id_sk_pembimbing' => $id_sk,
                     'updated_at' => now()
                 ]);
+
+            // Save to detail history table
+            $detail_records = [];
+            foreach ($request->id_skripsi as $id_skripsi) {
+                $detail_records[] = [
+                    'id_sk' => $id_sk,
+                    'id_skripsi' => $id_skripsi,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ];
+            }
+            DB::table('akd_skripsi_sk_detail')->insert($detail_records);
 
             DB::commit();
             return response()->json(['success' => 'SK Kolektif berhasil diterbitkan untuk ' . count($request->id_skripsi) . ' mahasiswa.']);
@@ -291,7 +318,8 @@ class SkripsiKaprodi extends Controller
             ], 404);
         }
 
-        $mahasiswa = DB::table('akd_skripsi as s')
+        $mahasiswa = DB::table('akd_skripsi_sk_detail as skd')
+            ->join('akd_skripsi as s', 'skd.id_skripsi', '=', 's.id')
             ->join('akd_mahasiswa as m', 's.nim', '=', 'm.nim')
             ->leftJoin('akd_program_studi as ps_mhs', 'm.kode_program_studi', '=', 'ps_mhs.kode_program_studi')
             ->leftJoin('simpeg_pegawai as p1', 's.id_dosen_pembimbing1', '=', 'p1.id')
@@ -299,14 +327,14 @@ class SkripsiKaprodi extends Controller
             ->select(
                 'm.nim',
                 'm.nama_mahasiswa as nama_mhs',
-                'ps_mhs.nama_program_studi as nama_program_studi',
+                'ps_mhs.nama_program_studi',
                 's.judul',
                 DB::raw("CONCAT_WS(' ', p1.gelar_depan, p1.nama, p1.gelar_belakang) as nama_p1"),
                 DB::raw("CONCAT_WS(' ', p2.gelar_depan, p2.nama, p2.gelar_belakang) as nama_p2"),
                 'p1.id as nip_p1',
                 'p2.id as nip_p2'
             )
-            ->where('s.id_sk_pembimbing', $id)
+            ->where('skd.id_sk', $id)
             ->get();
 
         if ($sk && !$sk->nama_program_studi && $mahasiswa->isNotEmpty()) {

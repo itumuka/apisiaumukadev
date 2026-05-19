@@ -250,7 +250,8 @@ class SkripsiKaprodi extends Controller
         $validation = Validator::make($request->all(), [
             'id' => 'required',
             'no_sk' => 'required',
-            'no_surat_tugas' => 'required'
+            'no_surat_tugas' => 'required',
+            'tgl_sk' => 'required|date' // Menambahkan validasi untuk tgl_sk
         ]);
 
         if ($validation->fails()) {
@@ -263,6 +264,7 @@ class SkripsiKaprodi extends Controller
                 ->update([
                     'no_sk' => $request->no_sk,
                     'no_surat_tugas' => $request->no_surat_tugas,
+                    'tgl_sk' => $request->tgl_sk, // Menambahkan tgl_sk ke dalam data yang diperbarui
                     'updated_at' => now()
                 ]);
 
@@ -481,4 +483,4 @@ class SkripsiKaprodi extends Controller
 
         return response()->json(['status' => 'success', 'message' => $message]);
     }
-}
+}

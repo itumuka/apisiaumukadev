@@ -416,6 +416,7 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::post("/kaprodi/skripsi/issue-sk-kolektif", "SkripsiKaprodi@simpan_sk_kolektif")->name('skripsi_issue_sk_kolektif');
     Route::get("/kaprodi/skripsi/list-sk-terbit", "SkripsiKaprodi@list_sk_terbit")->name('skripsi_list_sk_terbit');
     Route::get("/kaprodi/skripsi/get-sk-detail/{id}", "SkripsiKaprodi@get_sk_detail")->name('skripsi_get_sk_detail');
+    Route::post("/kaprodi/skripsi/update-sk", "SkripsiKaprodi@update_sk")->name('skripsi_update_sk');
     
     // Konfigurasi Sempro
     Route::get("/kaprodi/skripsi/config-sempro/{kode_prodi}", "SkripsiKaprodi@get_config_sempro")->name('skripsi_kaprodi_get_config_sempro');

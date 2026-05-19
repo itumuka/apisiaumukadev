@@ -402,6 +402,8 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::post("/mahasiswa/skripsi/upload-berkas", "Skripsi@upload_berkas")->name('skripsi_upload_berkas');
     Route::get("/mahasiswa/skripsi/log-bimbingan", "Skripsi@log_bimbingan")->name('skripsi_mhs_log_bimbingan');
     Route::post("/mahasiswa/skripsi/tambah-bimbingan", "Skripsi@tambah_bimbingan")->name('skripsi_mhs_tambah_bimbingan');
+    // Admin Rekap Bimbingan
+    Route::get("/akademik/rekap-bimbingan", "Skripsi@rekap_bimbingan")->name('skripsi_rekap_bimbingan');
     
     // Modul Skripsi Kaprodi & Dekanat
     Route::get("/kaprodi/skripsi/list-mahasiswa", "SkripsiKaprodi@list_mahasiswa_ta")->name('skripsi_kaprodi_list');
@@ -420,6 +422,8 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::get("/kaprodi/skripsi/config-sempro/{kode_prodi}", "SkripsiKaprodi@get_config_sempro")->name('skripsi_kaprodi_get_config_sempro');
     Route::post("/kaprodi/skripsi/update-config-sempro", "SkripsiKaprodi@update_config_sempro")->name('skripsi_kaprodi_update_config_sempro');
     Route::get("/kaprodi/skripsi/search-matakuliah", "SkripsiKaprodi@search_matakuliah")->name('skripsi_kaprodi_search_matakuliah');
+    Route::get("/akademik/skripsi/list-config-sempro", "SkripsiKaprodi@list_config_sempro")->name('skripsi_admin_list_config_sempro');
+    Route::post("/akademik/skripsi/validate-config-sempro", "SkripsiKaprodi@validate_config_sempro")->name('skripsi_admin_validate_config_sempro');
 
      // Modul Skripsi Dosen Pembimbing
     Route::get("/dosen/skripsi/dashboard", "SkripsiDosen@dashboard")->name('skripsi_dosen_dashboard');

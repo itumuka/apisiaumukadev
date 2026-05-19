@@ -300,6 +300,7 @@ class SkripsiKaprodi extends Controller
             ->select(
                 'sk.*',
                 'ps.nama_program_studi',
+                'ps.kode_jenjang_pendidikan',
                 'f.nama_fakultas',
                 'dekan.nama as nama_dekan',
                 'dekan.gelar_depan as gd_dekan',
@@ -383,10 +384,17 @@ class SkripsiKaprodi extends Controller
 
         DB::beginTransaction();
         try {
-            // 1. Update Skema
+            // 1. Update Skema & Validation Status
+            $updateData = ['ta_sempro_skema' => $request->ta_sempro_skema];
+            if ($request->ta_sempro_skema == 'matakuliah') {
+                $updateData['ta_sempro_is_validated'] = 0; // Requires admin validation
+            } else {
+                $updateData['ta_sempro_is_validated'] = 1; // Default skripsi doesn't need validation
+            }
+
             DB::table('akd_program_studi')
                 ->where('kode_program_studi', $request->kode_prodi)
-                ->update(['ta_sempro_skema' => $request->ta_sempro_skema]);
+                ->update($updateData);
 
             // 2. Sync Matakuliah if skema is matakuliah
             DB::table('akd_skripsi_sempro_mk')->where('kode_prodi', $request->kode_prodi)->delete();
@@ -425,5 +433,52 @@ class SkripsiKaprodi extends Controller
             ->get();
 
         return response()->json($query);
+    }
+
+    public function list_config_sempro()
+    {
+        $list = DB::table('akd_program_studi as ps')
+            ->select('ps.kode_program_studi', 'ps.nama_program_studi', 'ps.ta_sempro_skema', 'ps.ta_sempro_is_validated')
+            ->get();
+
+        $data = [];
+        foreach ($list as $item) {
+            $mapped_mks = DB::table('akd_skripsi_sempro_mk as m')
+                ->join('akd_matakuliah as mk', 'm.id_matakuliah', '=', 'mk.id_matakuliah')
+                ->where('m.kode_prodi', $item->kode_program_studi)
+                ->select('mk.kode_matakuliah', 'mk.nama_matakuliah')
+                ->get();
+
+            $data[] = [
+                'kode_program_studi' => $item->kode_program_studi,
+                'nama_program_studi' => $item->nama_program_studi,
+                'ta_sempro_skema' => $item->ta_sempro_skema,
+                'ta_sempro_is_validated' => $item->ta_sempro_is_validated ?? 1,
+                'mapped_matakuliah' => $mapped_mks
+            ];
+        }
+
+        return response()->json(['status' => 'success', 'data' => $data]);
+    }
+
+    public function validate_config_sempro(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'kode_prodi' => 'required',
+            'status' => 'required|in:0,1'
+        ]);
+
+        if ($v->fails()) return response()->json(['error' => $v->errors()], 422);
+
+        DB::table('akd_program_studi')
+            ->where('kode_program_studi', $request->kode_prodi)
+            ->update([
+                'ta_sempro_is_validated' => $request->status,
+                'updated_at' => now()
+            ]);
+
+        $message = $request->status == 1 ? 'Konfigurasi Sempro berhasil disetujui (Aktif)' : 'Konfigurasi Sempro ditolak (Pending)';
+
+        return response()->json(['status' => 'success', 'message' => $message]);
     }
 }

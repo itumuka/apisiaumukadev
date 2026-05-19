@@ -582,7 +582,7 @@ class Mskripsi extends Model
         $mhs = DB::table('akd_mahasiswa as m')
             ->leftJoin('akd_program_studi as p', 'm.kode_program_studi', '=', 'p.kode_program_studi')
             ->select('m.nim', 'm.nama_mahasiswa', 'm.kode_program_studi', 'p.nama_program_studi', 'p.kode_jenjang_pendidikan',
-                     'p.ta_sks_minimal', 'p.ta_ada_sempro', 'p.ta_sempro_skema', 'p.ta_minimal_bimbingan', 
+                     'p.ta_sks_minimal', 'p.ta_ada_sempro', 'p.ta_sempro_skema', 'p.ta_sempro_is_validated', 'p.ta_minimal_bimbingan', 
                      'p.ta_komponen_bayar', 'p.ta_komponen_bayar_ujian', 'p.ta_nama_tugas_akhir')
             ->where('m.nim', $nim)->first();
 
@@ -644,7 +644,7 @@ class Mskripsi extends Model
         // 5. Data Sempro & Bimbingan
         $sempro = null;
         if ($mhs->ta_ada_sempro) {
-            if (($mhs->ta_sempro_skema ?? 'skripsi') == 'matakuliah') {
+            if (($mhs->ta_sempro_skema ?? 'skripsi') == 'matakuliah' && ($mhs->ta_sempro_is_validated ?? 0) == 1) {
                 $is_lulus_mk = DB::table('akd_skripsi_sempro_mk as m')
                     ->join('akd_matakuliah as mk', 'm.id_matakuliah', '=', 'mk.id_matakuliah')
                     ->join('akd_penawaran_matakuliah as pm', 'mk.id_matakuliah', '=', 'pm.id_matakuliah')

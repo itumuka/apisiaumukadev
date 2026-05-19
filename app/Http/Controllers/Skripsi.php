@@ -368,4 +368,25 @@ class Skripsi extends Controller
 
         return response()->json(['success' => 'Catatan bimbingan berhasil disimpan.']);
     }
+
+    /**
+     * Admin: Rekap Bimbingan per Mahasiswa
+     */
+    public function rekap_bimbingan(Request $request)
+    {
+        $rows = DB::table('akd_skripsi as s')
+            ->join('akd_mahasiswa as m', 's.nim', '=', 'm.nim')
+            ->leftJoin('akd_program_studi as p', 'm.kode_program_studi', '=', 'p.kode_program_studi')
+            ->leftJoin('simpeg_pegawai as d', 's.id_dosen_pembimbing1', '=', 'd.id')
+            ->select(
+                's.id', 's.nim', 'm.nama_mahasiswa', 'p.nama_program_studi as prodi',
+                DB::raw("TRIM(CONCAT_WS(' ', d.gelar_depan, d.nama, d.gelar_belakang)) as pembimbing"),
+                DB::raw("(CASE WHEN s.fase_aktif = 'ujian' THEN 8 ELSE COALESCE(p.ta_minimal_bimbingan, 8) END) as min_bimbingan"),
+                DB::raw("(SELECT COUNT(*) FROM akd_skripsi_bimbingan b WHERE b.id_skripsi = s.id AND b.status IN ('disetujui','revisi')) as total_bimbingan")
+            )
+            ->orderBy('m.nama_mahasiswa', 'asc')
+            ->get();
+
+        return response()->json(['status' => 'success', 'data' => $rows]);
+    }
 }

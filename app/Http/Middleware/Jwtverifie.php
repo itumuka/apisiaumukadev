@@ -41,7 +41,7 @@ class Jwtverifie
             $token = Str::substr($header, 7); // Ambil token setelah "Bearer "
             try {
                 // Decode token JWT
-                $decoded = JWT::decode($token, new Key(config('jwt.key'), 'HS256'));
+                $decoded = JWT::decode($token, new Key(config('jwt.secret'), 'HS256'));
 
                 // Validasi username dengan token JWT
                 $usertoken = $decoded->sub ?? null; // `sub` diisi saat membuat token

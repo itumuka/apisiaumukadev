@@ -30,7 +30,7 @@ class Auth extends Controller
 
         // As you can see we are passing `JWT_SECRET` as the second parameter that will 
         // be used to decode the token in the future.
-        return JWT::encode($payload, config('jwt.key'), 'HS256');
+        return JWT::encode($payload, config('jwt.secret'), 'HS256');
     }
 
     public function bearerToken(Request $request)
@@ -39,7 +39,7 @@ class Auth extends Controller
         $username = $request->header('username', '');
         if (Str::startsWith($header, 'Bearer ')) {
             $hasil = Str::substr($header, 7);
-            $decoded = JWT::decode($hasil, new Key(config('jwt.key'), 'HS256'));
+            $decoded = JWT::decode($hasil, new Key(config('jwt.secret'), 'HS256'));
             return $decoded->sub;
         }
     }

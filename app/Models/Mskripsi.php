@@ -518,6 +518,7 @@ class Mskripsi extends Model
             ->leftJoin('simpeg_pegawai as d1', 's.id_dosen_pembimbing1', '=', 'd1.id')
             ->leftJoin('simpeg_pegawai as d2', 's.id_dosen_pembimbing2', '=', 'd2.id')
             ->select('s.*', 
+                DB::raw("CASE WHEN s.target_luaran IS NOT NULL AND s.target_luaran != 'buku_skripsi' THEN 1 ELSE 0 END as is_obe"),
                 DB::raw("CONCAT_WS(' ', d1.gelar_depan, d1.nama, d1.gelar_belakang) as nama_pembimbing1"),
                 DB::raw("CONCAT_WS(' ', d2.gelar_depan, d2.nama, d2.gelar_belakang) as nama_pembimbing2")
             )
@@ -633,7 +634,7 @@ class Mskripsi extends Model
             if ($stats['total_sks'] < $sks_min) {
                 return ['label' => 'SKS Belum Mencukupi (Min. ' . $sks_min . ')', 'url' => '#', 'warna' => 'secondary', 'disabled' => true];
             }
-            return ['label' => 'Mulai Pengajuan Proposal', 'url' => 'skripsi/dashboard#form-proposal', 'warna' => 'warning', 'disabled' => false];
+            return ['label' => 'Mulai Pengajuan Proposal', 'url' => 'mahasiswa/skripsi#form-proposal', 'warna' => 'warning', 'disabled' => false];
         }
 
         if ($skripsi->status == 'draft' || $skripsi->status == 'menunggu_pembimbing') {
@@ -644,17 +645,17 @@ class Mskripsi extends Model
         $sempro_lulus = $sempro && $sempro->status === 'lulus';
 
         if ($sempro_lulus && $total_bimbingan < $mhs->ta_minimal_bimbingan) {
-            return ['label' => 'Tambah Log Bimbingan (' . $total_bimbingan . '/' . $mhs->ta_minimal_bimbingan . ')', 'url' => 'skripsi/bimbingan', 'warna' => 'warning', 'disabled' => false];
+            return ['label' => 'Tambah Log Bimbingan (' . $total_bimbingan . '/' . $mhs->ta_minimal_bimbingan . ')', 'url' => 'mahasiswa/skripsi/bimbingan', 'warna' => 'warning', 'disabled' => false];
         }
 
         if ($skripsi->fase_aktif == 'bimbingan' && $total_bimbingan < $mhs->ta_minimal_bimbingan) {
-            return ['label' => 'Tambah Log Bimbingan (' . $total_bimbingan . '/' . $mhs->ta_minimal_bimbingan . ')', 'url' => 'skripsi/bimbingan', 'warna' => 'warning', 'disabled' => false];
+            return ['label' => 'Tambah Log Bimbingan (' . $total_bimbingan . '/' . $mhs->ta_minimal_bimbingan . ')', 'url' => 'mahasiswa/skripsi/bimbingan', 'warna' => 'warning', 'disabled' => false];
         }
 
         // ACC Sempro Pembimbing check removed - students proceed directly to sempro registration
 
         if ($mhs->ta_ada_sempro && (!$sempro || $sempro->status == 'draft')) {
-            return ['label' => 'Daftar Seminar Proposal', 'url' => 'skripsi/seminar', 'warna' => 'warning', 'disabled' => false];
+            return ['label' => 'Daftar Seminar Proposal', 'url' => 'mahasiswa/skripsi/seminar', 'warna' => 'warning', 'disabled' => false];
         }
 
         if ($mhs->ta_ada_sempro && $sempro->status == 'diajukan') {
@@ -666,7 +667,7 @@ class Mskripsi extends Model
         }
 
         if ($total_bimbingan >= $min_bimbingan_ujian && $bayar_ujian && (!$ujian || $ujian->status == 'pending')) {
-            return ['label' => 'Daftar Ujian Sidang Akhir', 'url' => 'skripsi/ujian', 'warna' => 'warning', 'disabled' => false];
+            return ['label' => 'Daftar Ujian Sidang Akhir', 'url' => 'mahasiswa/skripsi/ujian', 'warna' => 'warning', 'disabled' => false];
         }
 
         if ($ujian && $ujian->status == 'dijadwalkan') {
@@ -677,7 +678,7 @@ class Mskripsi extends Model
             return ['label' => 'Selamat! Menuju Yudisium 🎓', 'url' => '#', 'warna' => 'success', 'disabled' => true];
         }
 
-        return ['label' => 'Cek Progress TA', 'url' => 'skripsi/dashboard', 'warna' => 'warning', 'disabled' => false];
+        return ['label' => 'Cek Progress TA', 'url' => 'mahasiswa/skripsi', 'warna' => 'warning', 'disabled' => false];
     }
 
     private function compareValue($source, $op, $target) {

@@ -152,10 +152,6 @@ class SkripsiDosen extends Controller
             }
         }
 
-                ]);
-            }
-        }
-
         return response()->json([
             'success' => "Persetujuan {$request->fase} berhasil disimpan."
         ]);

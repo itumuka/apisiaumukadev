@@ -41,11 +41,13 @@ class Skripsi extends Controller
             'judul_en' => 'required',
             'abstrak' => 'required',
             'abstrak_en' => 'required',
+            'target_luaran' => 'nullable|string',
         ]);
 
         if ($v->fails()) return response()->json(['error' => $v->errors()], 422);
 
         $data = $request->only(['topik', 'topik_en', 'judul', 'judul_en', 'abstrak', 'abstrak_en']);
+        $data['target_luaran'] = $request->target_luaran ?? 'buku_skripsi';
         $data['updated_at'] = now();
 
         $skripsi = DB::table('akd_skripsi')->where('nim', $request->nim)->first();
@@ -391,5 +393,75 @@ class Skripsi extends Controller
             ->get();
 
         return response()->json(['status' => 'success', 'data' => $rows]);
+    }
+
+    /**
+     * Get Realisasi & Target Luaran Skripsi
+     */
+    public function get_luaran(Request $request)
+    {
+        $nim = $request->nim;
+        if (!$nim) return response()->json(['error' => 'Parameter nim diperlukan'], 400);
+
+        $skripsi = DB::table('akd_skripsi')->where('nim', $nim)->first();
+        if (!$skripsi) return response()->json(['error' => 'Data skripsi tidak ditemukan'], 404);
+
+        $luaran = DB::table('akd_skripsi_luaran')->where('id_skripsi', $skripsi->id)->first();
+        
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'target_luaran' => $skripsi->target_luaran,
+                'luaran' => $luaran
+            ]
+        ]);
+    }
+
+    /**
+     * Simpan/Update Realisasi Luaran Skripsi
+     */
+    public function simpan_luaran(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'nim' => 'required',
+            'jenis_luaran' => 'required|in:buku_skripsi,jurnal_sinta,jurnal_internasional,prosiding,paten,hki,lainnya',
+            'judul_luaran' => 'nullable|string',
+            'nama_media' => 'nullable|string',
+            'url_link' => 'nullable|string',
+            'file_bukti' => 'nullable|file|mimes:pdf,jpg,png,jpeg|max:5120'
+        ]);
+
+        if ($v->fails()) return response()->json(['error' => $v->errors()->all()], 422);
+
+        $skripsi = DB::table('akd_skripsi')->where('nim', $request->nim)->first();
+        if (!$skripsi) return response()->json(['error' => 'Data skripsi tidak ditemukan'], 404);
+
+        $data = [
+            'jenis_luaran' => $request->jenis_luaran,
+            'judul_luaran' => $request->judul_luaran,
+            'nama_media' => $request->nama_media,
+            'url_link' => $request->url_link,
+            'updated_at' => now()
+        ];
+
+        if ($request->hasFile('file_bukti')) {
+            $file = $request->file('file_bukti');
+            $path = $file->store('skripsi_luaran_bukti', 'public');
+            $data['file_bukti'] = $path;
+        }
+
+        $luaran = DB::table('akd_skripsi_luaran')->where('id_skripsi', $skripsi->id)->first();
+
+        if ($luaran) {
+            DB::table('akd_skripsi_luaran')->where('id_skripsi', $skripsi->id)->update($data);
+        } else {
+            $data['id_skripsi'] = $skripsi->id;
+            $data['nim'] = $request->nim;
+            $data['status_validasi'] = 'menunggu';
+            $data['created_at'] = now();
+            DB::table('akd_skripsi_luaran')->insert($data);
+        }
+
+        return response()->json(['success' => 'Data Realisasi Luaran Berhasil Disimpan']);
     }
 }

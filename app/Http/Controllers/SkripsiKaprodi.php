@@ -30,6 +30,7 @@ class SkripsiKaprodi extends Controller
                 's.judul',
                 's.topik',
                 's.status',
+                's.is_obe',
                 DB::raw("CONCAT_WS(' ', p1.gelar_depan, p1.nama, p1.gelar_belakang) as nama_pembimbing1"),
                 DB::raw("CONCAT_WS(' ', p2.gelar_depan, p2.nama, p2.gelar_belakang) as nama_pembimbing2"),
                 's.id_dosen_pembimbing1',
@@ -137,6 +138,27 @@ class SkripsiKaprodi extends Controller
             ]);
 
         return response()->json(['success' => 'Jadwal Ujian Akhir berhasil diplot']);
+    }
+
+    public function get_jadwal_ujian($id_skripsi)
+    {
+        $ujian = DB::table('akd_skripsi_ujian as u')
+            ->leftJoin('simpeg_pegawai as peg1', 'u.id_penguji1', '=', 'peg1.id')
+            ->leftJoin('simpeg_pegawai as peg2', 'u.id_penguji2', '=', 'peg2.id')
+            ->leftJoin('simpeg_pegawai as peg3', 'u.id_penguji3', '=', 'peg3.id')
+            ->select(
+                'u.*',
+                DB::raw("CONCAT_WS(' ', peg1.gelar_depan, peg1.nama, peg1.gelar_belakang) as nama_penguji1"),
+                DB::raw("CONCAT_WS(' ', peg2.gelar_depan, peg2.nama, peg2.gelar_belakang) as nama_penguji2"),
+                DB::raw("CONCAT_WS(' ', peg3.gelar_depan, peg3.nama, peg3.gelar_belakang) as nama_penguji3")
+            )
+            ->where('u.id_skripsi', $id_skripsi)
+            ->first();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $ujian
+        ]);
     }
 
     public function list_siap_sk(Request $request)

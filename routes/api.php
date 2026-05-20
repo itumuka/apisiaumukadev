@@ -420,6 +420,7 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::post("/kaprodi/skripsi/plot-pembimbing", "SkripsiKaprodi@plot_pembimbing")->name('skripsi_kaprodi_plot_pembimbing');
     Route::post("/kaprodi/skripsi/plot-jadwal-sempro", "SkripsiKaprodi@plot_jadwal_sempro")->name('skripsi_kaprodi_plot_sempro');
     Route::post("/kaprodi/skripsi/plot-jadwal-ujian", "SkripsiKaprodi@plot_jadwal_ujian")->name('skripsi_kaprodi_plot_ujian');
+    Route::get("/kaprodi/skripsi/get-jadwal-ujian/{id_skripsi}", "SkripsiKaprodi@get_jadwal_ujian")->name('skripsi_kaprodi_get_jadwal_ujian');
     
     // SK Kolektif (Dekanat/Kaprodi)
     Route::get("/kaprodi/skripsi/list-siap-sk", "SkripsiKaprodi@list_siap_sk")->name('skripsi_list_siap_sk');

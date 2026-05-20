@@ -21,8 +21,14 @@ class Mskripsi extends Model
             ->where('nim', $nim)->first();
 
         $skripsi = DB::table('akd_skripsi')->where('nim', $nim)->first();
-        $flag_pkkmb = $this->getSkripsiFlag($skripsi, 'is_pkkmb');
-        $flag_kkn = $this->getSkripsiFlag($skripsi, 'is_kkn');
+        $flag_pkkmb = 0;
+        try {
+            $flag_pkkmb = DB::table('akd_pkkmb')->where('nim', $nim)->where('status_lulus', 1)->count() > 0 ? 1 : 0;
+        } catch (\Exception $e) {
+            $flag_pkkmb = $this->getSkripsiFlag($skripsi, 'is_pkkmb');
+        }
+
+        $flag_kkn = $this->checkKKNGrade($nim, $skripsi) ? 1 : 0;
         $min_bimbingan_ujian = 8;
 
         if (!$mhs) return ['error' => 'Mahasiswa tidak ditemukan'];
@@ -735,6 +741,53 @@ class Mskripsi extends Model
             ->count() > 0;
 
         return $has_grade;
+    }
+
+    /**
+     * Check if student has passed KKN based on active KRS or Transcript
+     */
+    private function checkKKNGrade($nim, $skripsi = null)
+    {
+        // 1. Check in akd_detail_krs
+        $has_grade_krs = DB::table('akd_detail_krs as dk')
+            ->join('akd_kelas_kuliah as c', 'dk.id_kelas', '=', 'c.id_kelas')
+            ->join('akd_penawaran_matakuliah as p', 'c.id_tawar', '=', 'p.id_tawar')
+            ->join('akd_matakuliah as mk', 'p.id_matakuliah', '=', 'mk.id_matakuliah')
+            ->join('akd_krs as k', 'dk.id_krs', '=', 'k.id_krs')
+            ->join('akd_heregistrasi as h', 'k.id_heregistrasi', '=', 'h.id_heregistrasi')
+            ->where('h.nim', $nim)
+            ->where(function($query) {
+                $query->where('mk.nama_matakuliah', 'like', '%kkn%')
+                      ->orWhere('mk.nama_matakuliah', 'like', '%kuliah kerja nyata%')
+                      ->orWhere('mk.nama_matakuliah', 'like', '%kuliah kerja lapangan%');
+            })
+            ->whereNotNull('dk.nilai_akhir_huruf')
+            ->whereNotIn('dk.nilai_akhir_huruf', ['', 'E', 'T', 'K'])
+            ->count() > 0;
+
+        if ($has_grade_krs) {
+            return true;
+        }
+
+        // 2. Fallback to akd_transkrip
+        $has_grade_transkrip = DB::table('akd_transkrip as t')
+            ->join('akd_matakuliah as mk', 't.id_matakuliah', '=', 'mk.id_matakuliah')
+            ->where('t.nim', $nim)
+            ->where(function($query) {
+                $query->where('mk.nama_matakuliah', 'like', '%kkn%')
+                      ->orWhere('mk.nama_matakuliah', 'like', '%kuliah kerja nyata%')
+                      ->orWhere('mk.nama_matakuliah', 'like', '%kuliah kerja lapangan%');
+            })
+            ->whereNotNull('t.nilai')
+            ->whereNotIn('t.nilai', ['', 'E', 'T'])
+            ->count() > 0;
+
+        if ($has_grade_transkrip) {
+            return true;
+        }
+
+        // 3. Ultimate fallback to the legacy flag in akd_skripsi table
+        return $this->getSkripsiFlag($skripsi, 'is_kkn') === 1;
     }
 
     /**

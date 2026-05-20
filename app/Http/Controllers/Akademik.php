@@ -2600,4 +2600,151 @@ class Akademik extends Controller
         $edittampilkegiatanakademik = $this->akademik->edittampilkegiatanakademik();
         return $edittampilkegiatanakademik;
     }
+
+    public function pkkmbList(Request $request)
+    {
+        $query = DB::table('akd_mahasiswa')
+            ->leftJoin('akd_pkkmb', 'akd_mahasiswa.nim', '=', 'akd_pkkmb.nim')
+            ->leftJoin('akd_program_studi', 'akd_mahasiswa.kode_program_studi', '=', 'akd_program_studi.kode_program_studi')
+            ->select(
+                'akd_mahasiswa.nim',
+                'akd_mahasiswa.nama_mahasiswa',
+                'akd_mahasiswa.tahun_angkatan',
+                'akd_program_studi.nama_program_studi',
+                DB::raw('COALESCE(akd_pkkmb.status_lulus, 0) as status_lulus'),
+                'akd_pkkmb.tahun',
+                'akd_pkkmb.no_sertifikat',
+                'akd_pkkmb.file_sertifikat',
+                'akd_pkkmb.keterangan'
+            );
+
+        if ($request->filled('angkatan')) {
+            $query->where('akd_mahasiswa.tahun_angkatan', $request->angkatan);
+        }
+
+        if ($request->filled('status')) {
+            if ($request->status == '1') {
+                $query->where('akd_pkkmb.status_lulus', 1);
+            } else {
+                $query->where(function($q) {
+                    $q->whereNull('akd_pkkmb.status_lulus')
+                      ->orWhere('akd_pkkmb.status_lulus', 0);
+                });
+            }
+        }
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->where('akd_mahasiswa.nim', 'like', "%{$search}%")
+                  ->orWhere('akd_mahasiswa.nama_mahasiswa', 'like', "%{$search}%");
+            });
+        }
+
+        // Standard Pagination or simple datatable format
+        $data = $query->paginate($request->input('length', 10));
+
+        return response()->json([
+            'draw' => intval($request->input('draw', 1)),
+            'recordsTotal' => $data->total(),
+            'recordsFiltered' => $data->total(),
+            'data' => $data->items()
+        ]);
+    }
+
+    public function pkkmbUpdate(Request $request)
+    {
+        $validation = Validator::make($request->all(), [
+            'nim' => 'required',
+            'status_lulus' => 'required|in:0,1',
+        ]);
+
+        if ($validation->fails()) {
+            return response()->json(['error' => $validation->errors()->all()]);
+        }
+
+        $pkkmb = DB::table('akd_pkkmb')->where('nim', $request->nim)->first();
+
+        $data = [
+            'status_lulus' => $request->status_lulus,
+            'tahun' => $request->input('tahun', date('Y')),
+            'no_sertifikat' => $request->input('no_sertifikat'),
+            'keterangan' => $request->input('keterangan'),
+            'updated_at' => now()
+        ];
+
+        if ($request->hasFile('file_sertifikat')) {
+            $file = $request->file('file_sertifikat');
+            $path = $file->store('pkkmb_sertifikat', 'public');
+            $data['file_sertifikat'] = $path;
+        }
+
+        if ($pkkmb) {
+            DB::table('akd_pkkmb')->where('nim', $request->nim)->update($data);
+        } else {
+            $data['nim'] = $request->nim;
+            $data['created_at'] = now();
+            DB::table('akd_pkkmb')->insert($data);
+        }
+
+        return response()->json(['success' => 'Status PKKMB Mahasiswa berhasil diperbarui!']);
+    }
+
+    public function pkkmbImport(Request $request)
+    {
+        $validation = Validator::make($request->all(), [
+            'file_excel' => 'required|file|mimes:xlsx,xls'
+        ]);
+
+        if ($validation->fails()) {
+            return response()->json(['error' => $validation->errors()->all()]);
+        }
+
+        try {
+            $file = $request->file('file_excel');
+            $spreadsheet = IOFactory::load($file->getRealPath());
+            $sheet = $spreadsheet->getActiveSheet();
+            $rows = $sheet->toArray();
+
+            // Row 0 is header: NIM, Status (1/0), Tahun, No Sertifikat, Keterangan
+            $successCount = 0;
+            foreach ($rows as $index => $row) {
+                if ($index === 0) continue; // skip header
+                
+                $nim = trim($row[0]);
+                if (empty($nim)) continue;
+
+                $status_lulus = intval($row[1] ?? 0);
+                $tahun = trim($row[2] ?? date('Y'));
+                $no_sertifikat = trim($row[3] ?? '');
+                $keterangan = trim($row[4] ?? '');
+
+                // Verify student exists
+                $studentExists = DB::table('akd_mahasiswa')->where('nim', $nim)->exists();
+                if (!$studentExists) continue;
+
+                $pkkmb = DB::table('akd_pkkmb')->where('nim', $nim)->first();
+                $data = [
+                    'status_lulus' => $status_lulus,
+                    'tahun' => $tahun,
+                    'no_sertifikat' => $no_sertifikat,
+                    'keterangan' => $keterangan,
+                    'updated_at' => now()
+                ];
+
+                if ($pkkmb) {
+                    DB::table('akd_pkkmb')->where('nim', $nim)->update($data);
+                } else {
+                    $data['nim'] = $nim;
+                    $data['created_at'] = now();
+                    DB::table('akd_pkkmb')->insert($data);
+                }
+                $successCount++;
+            }
+
+            return response()->json(['success' => "Berhasil mengimpor {$successCount} data kelulusan PKKMB!"]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => ['Gagal memproses file Excel: ' . $e->getMessage()]]);
+        }
+    }
 }

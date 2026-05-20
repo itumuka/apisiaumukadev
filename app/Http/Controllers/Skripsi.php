@@ -486,7 +486,26 @@ class Skripsi extends Controller
             ->first();
 
         if (!$ujian) {
-            return response()->json(['error' => 'Pendaftaran ujian belum diinisiasi. Silakan unggah naskah ujian terlebih dahulu.'], 422);
+            // Ambil proposal/naskah terakhir jika ada
+            $latestProposal = DB::table('akd_skripsi_proposal')
+                ->where('id_skripsi', $skripsi->id)
+                ->where('nim', $nim)
+                ->orderBy('iterasi', 'desc')
+                ->first();
+            
+            $id_proposal = $latestProposal ? $latestProposal->id : null;
+
+            // Inisialisasi otomatis pendaftaran ujian
+            $ujianId = DB::table('akd_skripsi_ujian')->insertGetId([
+                'id_skripsi' => $skripsi->id,
+                'nim' => $nim,
+                'id_proposal' => $id_proposal,
+                'status' => 'pending',
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+
+            $ujian = DB::table('akd_skripsi_ujian')->where('id', $ujianId)->first();
         }
 
         if (in_array($ujian->status, ['diajukan', 'dijadwalkan', 'lulus'])) {

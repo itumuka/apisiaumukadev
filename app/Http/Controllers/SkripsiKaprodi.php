@@ -206,9 +206,26 @@ class SkripsiKaprodi extends Controller
 
         DB::beginTransaction();
         try {
+            // Logika Increment Otomatis untuk Nomor Surat Tugas
+            $baseNoST = $request->no_surat_tugas;
+            $prefix = '';
+            $currentNum = 0;
+            $suffix = '';
+            $padding = 0;
+            $isIncrementable = false;
+
+            // Regex: Mencari grup angka terakhir sebelum karakter non-angka/slash (seperti 4 di 11.4/ST)
+            if (preg_match('/^(.*?)(\d+)(\/ST\/.*|$)/', $baseNoST, $matches)) {
+                $prefix = $matches[1];
+                $currentNum = (int)$matches[2];
+                $suffix = $matches[3];
+                $padding = strlen($matches[2]); // Menjaga format leading zero (misal 004 -> 005)
+                $isIncrementable = true;
+            }
+
             $id_sk = DB::table('akd_skripsi_sk')->insertGetId([
                 'no_sk' => $request->no_sk,
-                'no_surat_tugas' => $request->no_surat_tugas,
+                'no_surat_tugas' => $baseNoST, // Simpan nomor awal sebagai referensi batch
                 'tgl_sk' => $request->tgl_sk,
                 'kode_prodi' => $request->kode_prodi,
                 'tahun_akademik' => $request->tahun_akademik,
@@ -227,10 +244,19 @@ class SkripsiKaprodi extends Controller
 
             // Save to detail history table
             $detail_records = [];
-            foreach ($request->id_skripsi as $id_skripsi) {
+            foreach ($request->id_skripsi as $index => $id_skripsi) {
+                $generatedNoST = $baseNoST;
+                if ($isIncrementable) {
+                    // Hitung nomor untuk mahasiswa ke-n
+                    $nextNum = $currentNum + $index;
+                    $formattedNum = str_pad($nextNum, $padding, '0', STR_PAD_LEFT);
+                    $generatedNoST = $prefix . $formattedNum . $suffix;
+                }
+
                 $detail_records[] = [
                     'id_sk' => $id_sk,
                     'id_skripsi' => $id_skripsi,
+                    'no_surat_tugas' => $generatedNoST, // Menyimpan nomor unik per mahasiswa
                     'created_at' => now(),
                     'updated_at' => now()
                 ];
@@ -258,18 +284,49 @@ class SkripsiKaprodi extends Controller
             return response()->json(['error' => $validation->errors()->all()], 422);
         }
 
+        DB::beginTransaction();
         try {
+            // Logika Increment untuk update (Sama seperti saat simpan baru)
+            $baseNoST = $request->no_surat_tugas;
+            $prefix = '';
+            $currentNum = 0;
+            $suffix = '';
+            $padding = 0;
+            $isIncrementable = false;
+
+            if (preg_match('/^(.*?)(\d+)(\/ST\/.*|$)/', $baseNoST, $matches)) {
+                $prefix = $matches[1];
+                $currentNum = (int)$matches[2];
+                $suffix = $matches[3];
+                $padding = strlen($matches[2]);
+                $isIncrementable = true;
+            }
+
             DB::table('akd_skripsi_sk')
                 ->where('id', $request->id)
                 ->update([
                     'no_sk' => $request->no_sk,
-                    'no_surat_tugas' => $request->no_surat_tugas,
+                    'no_surat_tugas' => $baseNoST,
                     'tgl_sk' => $request->tgl_sk, // Menambahkan tgl_sk ke dalam data yang diperbarui
                     'updated_at' => now()
                 ]);
 
-            return response()->json(['success' => 'Data SK berhasil diperbarui.']);
+            // Sinkronisasi nomor surat tugas individu di tabel detail
+            $details = DB::table('akd_skripsi_sk_detail')->where('id_sk', $request->id)->orderBy('id', 'asc')->get();
+            foreach ($details as $index => $det) {
+                $generatedNoST = $baseNoST;
+                if ($isIncrementable) {
+                    $nextNum = $currentNum + $index;
+                    $formattedNum = str_pad($nextNum, $padding, '0', STR_PAD_LEFT);
+                    $generatedNoST = $prefix . $formattedNum . $suffix;
+                }
+                DB::table('akd_skripsi_sk_detail')->where('id', $det->id)->update(['no_surat_tugas' => $generatedNoST]);
+            }
+
+            DB::commit();
+            return response()->json(['success' => 'Data SK dan Nomor Surat Tugas individu berhasil diperbarui.']);
         } catch (\Exception $e) {
+            DB::rollBack();
             return response()->json(['error' => 'Gagal memperbarui SK: ' . $e->getMessage()], 500);
         }
     }
@@ -334,6 +391,7 @@ class SkripsiKaprodi extends Controller
                 's.judul',
                 DB::raw("CONCAT_WS(' ', p1.gelar_depan, p1.nama, p1.gelar_belakang) as nama_p1"),
                 DB::raw("CONCAT_WS(' ', p2.gelar_depan, p2.nama, p2.gelar_belakang) as nama_p2"),
+                'skd.no_surat_tugas as no_st_ind', // Ambil nomor individu
                 'p1.id as nip_p1',
                 'p2.id as nip_p2'
             )

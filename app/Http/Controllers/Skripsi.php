@@ -83,6 +83,9 @@ class Skripsi extends Controller
         $mskripsi = new Mskripsi();
         $hasil = $mskripsi->cekKelayakan($nim, $fase);
 
+        $skripsi = DB::table('akd_skripsi')->where('nim', $nim)->first();
+        $hasil['judul_proposal'] = $skripsi ? $skripsi->judul : '';
+
         return response()->json([
             'status' => 'success',
             'data' => $hasil

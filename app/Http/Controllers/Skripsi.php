@@ -464,4 +464,146 @@ class Skripsi extends Controller
 
         return response()->json(['success' => 'Data Realisasi Luaran Berhasil Disimpan']);
     }
+
+    /**
+     * Ajukan Pendaftaran Ujian Skripsi
+     */
+    public function ajukan_ujian(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'nim' => 'required'
+        ]);
+
+        if ($v->fails()) return response()->json(['error' => $v->errors()->all()], 422);
+
+        $nim = $request->nim;
+        $skripsi = DB::table('akd_skripsi')->where('nim', $nim)->first();
+        if (!$skripsi) return response()->json(['error' => 'Data skripsi belum ada.'], 400);
+
+        $ujian = DB::table('akd_skripsi_ujian')
+            ->where('id_skripsi', $skripsi->id)
+            ->where('nim', $nim)
+            ->first();
+
+        if (!$ujian) {
+            return response()->json(['error' => 'Pendaftaran ujian belum diinisiasi. Silakan unggah naskah ujian terlebih dahulu.'], 422);
+        }
+
+        if (in_array($ujian->status, ['diajukan', 'dijadwalkan', 'lulus'])) {
+            return response()->json(['error' => 'Pendaftaran ujian sudah diajukan sebelumnya.'], 409);
+        }
+
+        // Update judul jika dikirimkan dari form pendaftaran ujian
+        if ($request->has('judul') && !empty($request->judul)) {
+            DB::table('akd_skripsi')
+                ->where('id', $skripsi->id)
+                ->update(['judul' => $request->judul]);
+        }
+
+        DB::table('akd_skripsi_ujian')
+            ->where('id', $ujian->id)
+            ->update([
+                'status' => 'diajukan',
+                'updated_at' => now()
+            ]);
+
+        return response()->json(['success' => 'Pendaftaran ujian skripsi berhasil diajukan.']);
+    }
+
+    /**
+     * Ambil Portofolio Pencapaian CPL Skripsi Mahasiswa
+     */
+    public function get_portofolio_cpl(Request $request)
+    {
+        $nim = $request->nim;
+        if (!$nim) return response()->json(['error' => 'Parameter nim diperlukan'], 400);
+
+        $skripsi = DB::table('akd_skripsi')->where('nim', $nim)->first();
+        if (!$skripsi) return response()->json(['error' => 'Data skripsi tidak ditemukan.'], 404);
+
+        $ujian = DB::table('akd_skripsi_ujian')
+            ->where('id_skripsi', $skripsi->id)
+            ->where('nim', $nim)
+            ->first();
+
+        if (!$ujian) {
+            return response()->json([
+                'status' => 'success',
+                'data' => null
+            ]);
+        }
+
+        // Ambil nilai per CPMK
+        $scores = DB::table('akd_skripsi_nilai_cpmk')
+            ->where('id_skripsi_ujian', $ujian->id)
+            ->get();
+
+        if ($scores->count() == 0) {
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'nilai_angka' => $ujian->nilai_angka,
+                    'nilai_ujian' => $ujian->nilai_ujian,
+                    'status_ujian' => $ujian->status,
+                    'cpl_portfolio' => [],
+                    'cpmk_scores' => []
+                ]
+            ]);
+        }
+
+        // Ambil kriteria CPMK dan pemetaan CPL
+        $cpmk_cpl = DB::table('akd_skripsi_cpmk_cpl as cc')
+            ->join('akd_skripsi_rubrik_cpmk as r', 'cc.id_cpmk', '=', 'r.id')
+            ->select('cc.kode_cpl', 'r.id as id_cpmk', 'r.kode_cpmk', 'r.nama_cpmk')
+            ->get();
+
+        // Hitung rata-rata nilai per CPMK dari semua penguji/verifikator
+        $cpmk_averages = [];
+        $grouped_scores = $scores->groupBy('id_cpmk');
+        foreach ($grouped_scores as $cpmk_id => $cpmk_scores) {
+            $cpmk_averages[$cpmk_id] = $cpmk_scores->avg('nilai');
+        }
+
+        // Group by CPL dan hitung pencapaian
+        $cpl_achievements = [];
+        $cpl_groups = $cpmk_cpl->groupBy('kode_cpl');
+        foreach ($cpl_groups as $cpl_code => $mappings) {
+            $sum = 0;
+            $count = 0;
+            foreach ($mappings as $m) {
+                if (isset($cpmk_averages[$m->id_cpmk])) {
+                    $sum += $cpmk_averages[$m->id_cpmk];
+                    $count++;
+                }
+            }
+            if ($count > 0) {
+                $cpl_achievements[] = [
+                    'cpl' => $cpl_code,
+                    'achievement' => round($sum / $count, 2)
+                ];
+            }
+        }
+
+        $cpmk_scores_formatted = [];
+        foreach ($cpmk_averages as $cpmk_id => $avg) {
+            $item = $cpmk_cpl->firstWhere('id_cpmk', $cpmk_id);
+            $cpmk_scores_formatted[] = [
+                'id_cpmk' => $cpmk_id,
+                'kode_cpmk' => $item ? $item->kode_cpmk : '',
+                'nama_cpmk' => $item ? $item->nama_cpmk : 'Kriteria ' . $cpmk_id,
+                'nilai' => round($avg, 2)
+            ];
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'nilai_angka' => $ujian->nilai_angka,
+                'nilai_ujian' => $ujian->nilai_ujian,
+                'status_ujian' => $ujian->status,
+                'cpl_portfolio' => $cpl_achievements,
+                'cpmk_scores' => $cpmk_scores_formatted
+            ]
+        ]);
+    }
 }

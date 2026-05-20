@@ -180,9 +180,9 @@ class SkripsiDosen extends Controller
                 's.judul',
                 's.target_luaran',
                 'p.nama_program_studi',
-                'u.tgl_ujian',
-                'u.jam_ujian',
-                'u.ruang_ujian',
+                'u.tanggal_ujian as tgl_ujian',
+                'u.jam_mulai as jam_ujian',
+                'u.ruang as ruang_ujian',
                 'u.status as status_ujian',
                 'u.nilai_ujian',
                 'u.nilai_angka',
@@ -198,8 +198,8 @@ class SkripsiDosen extends Controller
                       ->orWhere('u.id_penguji2', $id_dosen)
                       ->orWhere('u.id_penguji3', $id_dosen);
             })
-            ->whereNotNull('u.tgl_ujian')
-            ->orderBy('u.tgl_ujian', 'desc')
+            ->whereNotNull('u.tanggal_ujian')
+            ->orderBy('u.tanggal_ujian', 'desc')
             ->get();
 
         return response()->json([

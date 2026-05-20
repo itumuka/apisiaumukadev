@@ -389,6 +389,11 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::get("/akademik/modal-ips-diambil", "Akademik@modal_ips_ambil")->name('dsnmodal_ips_ambil');
 
     Route::get("/akademik/edittampilkegiatanakademik", "Akademik@edittampilkegiatanakademik")->name('akedittampilkegiatanakademik');
+
+    // PKKMB Admin APIs
+    Route::get("/akademik/pkkmb", "Akademik@pkkmbList")->name('akpkkmbList');
+    Route::post("/akademik/pkkmb/update", "Akademik@pkkmbUpdate")->name('akpkkmbUpdate');
+    Route::post("/akademik/pkkmb/import", "Akademik@pkkmbImport")->name('akpkkmbImport');
     Route::post("/akademiktools/import-makul-penawaran", "AkademikTools@import_makul_penawaran")->name('akimport_makul_penawaran');
 
     // Modul Skripsi Mahasiswa

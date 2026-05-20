@@ -21,9 +21,14 @@ class Mskripsi extends Model
             ->where('nim', $nim)->first();
 
         $skripsi = DB::table('akd_skripsi')->where('nim', $nim)->first();
-        $flag_pkkmb = $this->getSkripsiFlag($skripsi, 'is_pkkmb');
-        $flag_kkn = $this->getSkripsiFlag($skripsi, 'is_kkn');
-        $flag_pkpm = $this->getSkripsiFlag($skripsi, 'is_pkpm');
+        $flag_pkkmb = 0;
+        try {
+            $flag_pkkmb = DB::table('akd_pkkmb')->where('nim', $nim)->where('status_lulus', 1)->count() > 0 ? 1 : 0;
+        } catch (\Exception $e) {
+            $flag_pkkmb = $this->getSkripsiFlag($skripsi, 'is_pkkmb');
+        }
+
+        $flag_kkn = $this->checkKKNGrade($nim, $skripsi) ? 1 : 0;
         $min_bimbingan_ujian = 8;
 
         if (!$mhs) return ['error' => 'Mahasiswa tidak ditemukan'];
@@ -118,97 +123,28 @@ class Mskripsi extends Model
                 'kode_syarat' => 'BEBAS_E'
             ];
             
-            // 4. Bimbingan requirement for Seminar Proposal
-            if ($fase == 'sempro' && $prodiConfig->ta_minimal_bimbingan) {
-                $bimbingan_lolos = $total_bimbingan_valid >= $prodiConfig->ta_minimal_bimbingan;
-                if (!$bimbingan_lolos) $semua_lolos = false;
+            // 4. Course Grade Validation for Seminar Proposal
+            if ($fase == 'sempro') {
+                $has_sempro_grade = $this->checkSemproGrade($nim);
+                if (!$has_sempro_grade) $semua_lolos = false;
 
                 $hasil[] = [
                     'no' => $index++,
                     'id_syarat_prodi' => null,
-                    'syarat' => 'Jumlah Log Bimbingan Tervalidasi',
-                    'isi' => $total_bimbingan_valid . ' / ' . $prodiConfig->ta_minimal_bimbingan . ' log bimbingan tervalidasi (ACC/Revisi)',
-                    'hubungi' => 'Dosen Pembimbing',
-                    'status' => $bimbingan_lolos ? 'v' : 'x',
+                    'syarat' => 'Nilai Matakuliah Seminar Proposal',
+                    'isi' => $has_sempro_grade ? 'Sudah Ada' : 'Belum Ada',
+                    'hubungi' => 'Bagian Akademik',
+                    'status' => $has_sempro_grade ? 'v' : 'x',
                     'jenis' => 'sistem',
                     'is_wajib' => 1,
                     'tipe_upload' => null,
-                    'kode_syarat' => 'BIMBINGAN_ACC'
+                    'kode_syarat' => 'NILAI_SEMPRO'
                 ];
             }
 
-            // 5. Payment requirement based on phase
-            if ($fase == 'sempro' && $prodiConfig->ta_komponen_bayar) {
-                $bayar_ta = DB::table('keu_tagihan')
-                    ->where('nim', $nim)
-                    ->where('nama_biaya', 'like', '%' . $prodiConfig->ta_komponen_bayar . '%')
-                    ->where('status', '1')
-                    ->count() > 0;
-                
-                if (!$bayar_ta) $semua_lolos = false;
-                
-                $hasil[] = [
-                    'no' => $index++,
-                    'id_syarat_prodi' => null,
-                    'syarat' => 'Pembayaran Biaya Seminar Proposal',
-                    'isi' => $bayar_ta ? 'Sudah Lunas' : 'Belum Lunas',
-                    'hubungi' => 'Bagian Keuangan',
-                    'status' => $bayar_ta ? 'v' : 'x',
-                    'jenis' => 'pembayaran',
-                    'is_wajib' => 1,
-                    'tipe_upload' => null,
-                    'kode_syarat' => 'BAYAR_SEMPRO'
-                ];
-            }
-
+            // ACC Sempro Pembimbing requirement removed - students can register sempro directly
             if ($fase == 'sempro') {
-                $skema = $prodiConfig->ta_sempro_skema ?? 'skripsi';
-                
-                if ($skema == 'matakuliah') {
-                    // Check if student has passed any of the mapped courses
-                    $sempro_lulus = DB::table('akd_skripsi_sempro_mk as m')
-                        ->join('akd_matakuliah as mk', 'm.id_matakuliah', '=', 'mk.id_matakuliah')
-                        ->join('akd_penawaran_matakuliah as pm', 'mk.id_matakuliah', '=', 'pm.id_matakuliah')
-                        ->join('akd_kelas_kuliah as kk', 'pm.id_tawar', '=', 'kk.id_tawar')
-                        ->join('akd_detail_krs as dk', 'kk.id_kelas', '=', 'dk.id_kelas')
-                        ->join('akd_krs as k', 'dk.id_krs', '=', 'k.id_krs')
-                        ->join('akd_heregistrasi as h', 'k.id_heregistrasi', '=', 'h.id_heregistrasi')
-                        ->where('h.nim', $nim)
-                        ->where('m.kode_prodi', $mhs->kode_program_studi)
-                        ->whereNotNull('dk.nilai_akhir_huruf')
-                        ->whereNotIn('dk.nilai_akhir_huruf', ['', 'E', 'D', 'T'])
-                        ->count() > 0;
-
-                    $hasil[] = [
-                        'no' => $index++,
-                        'id_syarat_prodi' => null,
-                        'syarat' => 'Lulus Mata Kuliah Seminar Proposal',
-                        'isi' => $sempro_lulus ? 'Sudah Lulus' : 'Belum Lulus Mata Kuliah Terkait',
-                        'hubungi' => 'Kaprodi',
-                        'status' => $sempro_lulus ? 'v' : 'x',
-                        'jenis' => 'sistem',
-                        'is_wajib' => 1,
-                        'tipe_upload' => null,
-                        'kode_syarat' => 'ACC_SEMPRO'
-                    ];
-                    if (!$sempro_lulus) $semua_lolos = false;
-                } else {
-                    $sempro_acc = $skripsi && strtolower((string) ($skripsi->fase_aktif ?? '')) === 'sempro';
-                    if (!$sempro_acc) $semua_lolos = false;
-
-                    $hasil[] = [
-                        'no' => $index++,
-                        'id_syarat_prodi' => null,
-                        'syarat' => 'ACC Sempro Pembimbing',
-                        'isi' => $sempro_acc ? 'Sudah ACC' : 'Belum ACC',
-                        'hubungi' => 'Dosen Pembimbing',
-                        'status' => $sempro_acc ? 'v' : 'x',
-                        'jenis' => 'sistem',
-                        'is_wajib' => 1,
-                        'tipe_upload' => null,
-                        'kode_syarat' => 'ACC_SEMPRO'
-                    ];
-                }
+                // Advisor approval is no longer required for sempro registration
             }
 
             if ($fase == 'ujian') {
@@ -242,22 +178,6 @@ class Mskripsi extends Model
                     'is_wajib' => 1,
                     'tipe_upload' => null,
                     'kode_syarat' => 'KKN'
-                ];
-
-                $pkpm_lolos = $flag_pkpm === 1;
-                if (!$pkpm_lolos) $semua_lolos = false;
-
-                $hasil[] = [
-                    'no' => $index++,
-                    'id_syarat_prodi' => null,
-                    'syarat' => 'Lulus PKPM',
-                    'isi' => $pkpm_lolos ? 'Sudah Lulus' : 'Belum Lulus',
-                    'hubungi' => 'Bagian Akademik',
-                    'status' => $pkpm_lolos ? 'v' : 'x',
-                    'jenis' => 'sistem',
-                    'is_wajib' => 1,
-                    'tipe_upload' => null,
-                    'kode_syarat' => 'PKPM'
                 ];
 
                 $bimbingan_ujian_lolos = $total_bimbingan_valid >= $min_bimbingan_ujian;
@@ -302,11 +222,27 @@ class Mskripsi extends Model
 
             // 6. Seminar Proposal Requirement (if enabled by prodi)
             if ($fase == 'ujian' && $prodiConfig->ta_ada_sempro != 0) {
-                $sempro_lulus = DB::table('akd_skripsi_proposal as p')
-                    ->join('akd_skripsi as s', 'p.id_skripsi', '=', 's.id')
-                    ->where('s.nim', $nim)
-                    ->where('p.status', 'lulus')
-                    ->count() > 0;
+                // Check if prodi has matakuliah scheme
+                $isSemproMatakuliah = false;
+                if ($mhs) {
+                    $prodiInfo = DB::table('akd_program_studi')
+                        ->where('kode_program_studi', $mhs->kode_program_studi)
+                        ->select('ta_sempro_skema', 'ta_sempro_is_validated')
+                        ->first();
+                    if ($prodiInfo && $prodiInfo->ta_sempro_skema === 'matakuliah' && $prodiInfo->ta_sempro_is_validated == 1) {
+                        $isSemproMatakuliah = true;
+                    }
+                }
+
+                if ($isSemproMatakuliah) {
+                    $sempro_lulus = $this->checkSemproByMataKuliahLulus($nim, $mhs->kode_program_studi);
+                } else {
+                    $sempro_lulus = DB::table('akd_skripsi_proposal as p')
+                        ->join('akd_skripsi as s', 'p.id_skripsi', '=', 's.id')
+                        ->where('s.nim', $nim)
+                        ->where('p.status', 'lulus')
+                        ->count() > 0;
+                }
                 
                 if (!$sempro_lulus) $semua_lolos = false;
 
@@ -361,11 +297,24 @@ class Mskripsi extends Model
                     $is_terpenuhi = $has_ta > 0;
                 }
                 else if ($rule->kode_syarat == 'LULUS_SEMPRO') {
-                    $sempro_lulus = DB::table('akd_skripsi_proposal as p')
-                        ->join('akd_skripsi as s', 'p.id_skripsi', '=', 's.id')
-                        ->where('s.nim', $nim)
-                        ->where('p.status', 'lulus')
-                        ->count() > 0;
+                    $isSemproMatakuliah = false;
+                    $prodiInfo = DB::table('akd_program_studi')
+                        ->where('kode_program_studi', $mhs->kode_program_studi)
+                        ->select('ta_sempro_skema', 'ta_sempro_is_validated')
+                        ->first();
+                    if ($prodiInfo && $prodiInfo->ta_sempro_skema === 'matakuliah' && $prodiInfo->ta_sempro_is_validated == 1) {
+                        $isSemproMatakuliah = true;
+                    }
+
+                    if ($isSemproMatakuliah) {
+                        $sempro_lulus = $this->checkSemproByMataKuliahLulus($nim, $mhs->kode_program_studi);
+                    } else {
+                        $sempro_lulus = DB::table('akd_skripsi_proposal as p')
+                            ->join('akd_skripsi as s', 'p.id_skripsi', '=', 's.id')
+                            ->where('s.nim', $nim)
+                            ->where('p.status', 'lulus')
+                            ->count() > 0;
+                    }
                     $isi_aktual = $sempro_lulus ? "Sudah Lulus" : "Belum Lulus";
                     $is_terpenuhi = $sempro_lulus;
                 }
@@ -402,32 +351,10 @@ class Mskripsi extends Model
                     $isi_aktual = $flag_kkn == 1 ? 'Sudah Lulus' : 'Belum Lulus';
                     $is_terpenuhi = $this->compareValue($flag_kkn, $operator, $target_flag);
                 }
-                else if ($rule->kode_syarat == 'PKPM') {
-                    $target_flag = is_numeric($rule->nilai_target) ? (float)$rule->nilai_target : 1;
-                    $operator = $rule->operator ?: '>=';
-                    $isi_aktual = $flag_pkpm == 1 ? 'Sudah Lulus' : 'Belum Lulus';
-                    $is_terpenuhi = $this->compareValue($flag_pkpm, $operator, $target_flag);
-                }
                 else if ($rule->kode_syarat == 'ACC_SEMPRO') {
-                    $skema = $prodiConfig->ta_sempro_skema ?? 'skripsi';
-                    if ($skema == 'matakuliah') {
-                        $is_terpenuhi = DB::table('akd_skripsi_sempro_mk as m')
-                            ->join('akd_matakuliah as mk', 'm.id_matakuliah', '=', 'mk.id_matakuliah')
-                            ->join('akd_penawaran_matakuliah as pm', 'mk.id_matakuliah', '=', 'pm.id_matakuliah')
-                            ->join('akd_kelas_kuliah as kk', 'pm.id_tawar', '=', 'kk.id_tawar')
-                            ->join('akd_detail_krs as dk', 'kk.id_kelas', '=', 'dk.id_kelas')
-                            ->join('akd_krs as k', 'dk.id_krs', '=', 'k.id_krs')
-                            ->join('akd_heregistrasi as h', 'k.id_heregistrasi', '=', 'h.id_heregistrasi')
-                            ->where('h.nim', $nim)
-                            ->where('m.kode_prodi', $mhs->kode_program_studi)
-                            ->whereNotNull('dk.nilai_akhir_huruf')
-                            ->whereNotIn('dk.nilai_akhir_huruf', ['', 'E', 'D', 'T'])
-                            ->count() > 0;
-                        $isi_aktual = $is_terpenuhi ? 'Sudah Lulus (Matakuliah)' : 'Belum Lulus Matakuliah Terkait';
-                    } else {
-                        $is_terpenuhi = $skripsi && strtolower((string) ($skripsi->fase_aktif ?? '')) === 'sempro';
-                        $isi_aktual = $is_terpenuhi ? 'Sudah ACC' : 'Belum ACC';
-                    }
+                    // ACC_SEMPRO requirement removed - always considered fulfilled
+                    $isi_aktual = 'Tidak Perlu ACC';
+                    $is_terpenuhi = true;
                 }
 
                 $status_ikon = $is_terpenuhi ? 'v' : 'x';
@@ -528,24 +455,6 @@ class Mskripsi extends Model
                 ];
             }
 
-            if (!in_array('PKPM', $kodeSyaratProdi)) {
-                $pkpm_lolos = $flag_pkpm === 1;
-                if (!$pkpm_lolos) $semua_lolos = false;
-
-                $hasil[] = [
-                    'no' => $index++,
-                    'id_syarat_prodi' => null,
-                    'syarat' => 'Lulus PKPM',
-                    'isi' => $pkpm_lolos ? 'Sudah Lulus' : 'Belum Lulus',
-                    'hubungi' => 'Bagian Akademik',
-                    'status' => $pkpm_lolos ? 'v' : 'x',
-                    'jenis' => 'sistem',
-                    'is_wajib' => 1,
-                    'tipe_upload' => null,
-                    'kode_syarat' => 'PKPM'
-                ];
-            }
-
             if (!in_array('BIMBINGAN_8X', $kodeSyaratProdi) && !in_array('BIMBINGAN_ACC', $kodeSyaratProdi)) {
                 $bimbingan_ujian_lolos = $total_bimbingan_valid >= $min_bimbingan_ujian;
                 if (!$bimbingan_ujian_lolos) $semua_lolos = false;
@@ -582,8 +491,9 @@ class Mskripsi extends Model
         $mhs = DB::table('akd_mahasiswa as m')
             ->leftJoin('akd_program_studi as p', 'm.kode_program_studi', '=', 'p.kode_program_studi')
             ->select('m.nim', 'm.nama_mahasiswa', 'm.kode_program_studi', 'p.nama_program_studi', 'p.kode_jenjang_pendidikan',
-                     'p.ta_sks_minimal', 'p.ta_ada_sempro', 'p.ta_sempro_skema', 'p.ta_sempro_is_validated', 'p.ta_minimal_bimbingan', 
-                     'p.ta_komponen_bayar', 'p.ta_komponen_bayar_ujian', 'p.ta_nama_tugas_akhir')
+                     'p.ta_sks_minimal', 'p.ta_ada_sempro', 'p.ta_minimal_bimbingan', 
+                     'p.ta_komponen_bayar', 'p.ta_komponen_bayar_ujian', 'p.ta_nama_tugas_akhir',
+                     'p.ta_sempro_skema', 'p.ta_sempro_is_validated')
             ->where('m.nim', $nim)->first();
 
         if (!$mhs) return ['error' => 'Data Mahasiswa atau Program Studi tidak sinkron.'];
@@ -591,45 +501,17 @@ class Mskripsi extends Model
         // 2. Stats Akademik
         $stats = $this->getAcademicStats($nim);
 
-        $bayar_ta = true;
-        if ($mhs->ta_komponen_bayar) {
-            $unpaid = DB::table('keu_tagihan')
-                ->where('nim', $nim)
-                ->where('nama_biaya', 'like', '%' . $mhs->ta_komponen_bayar . '%')
-                ->where('status', '0')
-                ->count();
-            
-            if ($unpaid > 0) {
-                $bayar_ta = false;
-            } else {
-                $paid = DB::table('keu_tagihan')
-                    ->where('nim', $nim)
-                    ->where('nama_biaya', 'like', '%' . $mhs->ta_komponen_bayar . '%')
-                    ->where('status', '1')
-                    ->count();
-                if ($paid == 0) $bayar_ta = false;
-            }
-        }
+        $bayar_ta = ($mhs->ta_komponen_bayar) ? DB::table('keu_tagihan')
+            ->where('nim', $nim)
+            ->where('nama_biaya', 'like', '%' . $mhs->ta_komponen_bayar . '%')
+            ->where('status', '1')
+            ->count() > 0 : true; // Jika tidak ada komponen biaya, anggap sudah lunas
         
-        $bayar_ujian = true;
-        if ($mhs->ta_komponen_bayar_ujian) {
-            $unpaid_ujian = DB::table('keu_tagihan')
-                ->where('nim', $nim)
-                ->where('nama_biaya', 'like', '%' . $mhs->ta_komponen_bayar_ujian . '%')
-                ->where('status', '0')
-                ->count();
-            
-            if ($unpaid_ujian > 0) {
-                $bayar_ujian = false;
-            } else {
-                $paid_ujian = DB::table('keu_tagihan')
-                    ->where('nim', $nim)
-                    ->where('nama_biaya', 'like', '%' . $mhs->ta_komponen_bayar_ujian . '%')
-                    ->where('status', '1')
-                    ->count();
-                if ($paid_ujian == 0) $bayar_ujian = false;
-            }
-        }
+        $bayar_ujian = ($mhs->ta_komponen_bayar_ujian) ? DB::table('keu_tagihan')
+            ->where('nim', $nim)
+            ->where('nama_biaya', 'like', '%' . $mhs->ta_komponen_bayar_ujian . '%')
+            ->where('status', '1')
+            ->count() > 0 : true;
 
         // 4. Data Skripsi Induk
         $skripsi = DB::table('akd_skripsi as s')
@@ -642,33 +524,28 @@ class Mskripsi extends Model
             ->where('s.nim', $nim)->first();
 
         // 5. Data Sempro & Bimbingan
-        $sempro = null;
-        if ($mhs->ta_ada_sempro) {
-            if (($mhs->ta_sempro_skema ?? 'skripsi') == 'matakuliah' && ($mhs->ta_sempro_is_validated ?? 0) == 1) {
-                $is_lulus_mk = DB::table('akd_skripsi_sempro_mk as m')
-                    ->join('akd_matakuliah as mk', 'm.id_matakuliah', '=', 'mk.id_matakuliah')
-                    ->join('akd_penawaran_matakuliah as pm', 'mk.id_matakuliah', '=', 'pm.id_matakuliah')
-                    ->join('akd_kelas_kuliah as kk', 'pm.id_tawar', '=', 'kk.id_tawar')
-                    ->join('akd_detail_krs as dk', 'kk.id_kelas', '=', 'dk.id_kelas')
-                    ->join('akd_krs as k', 'dk.id_krs', '=', 'k.id_krs')
-                    ->join('akd_heregistrasi as h', 'k.id_heregistrasi', '=', 'h.id_heregistrasi')
-                    ->where('h.nim', $nim)
-                    ->where('m.kode_prodi', $mhs->kode_program_studi)
-                    ->whereNotNull('dk.nilai_akhir_huruf')
-                    ->whereNotIn('dk.nilai_akhir_huruf', ['', 'E', 'D', 'T'])
-                    ->first();
+        $sempro = $skripsi ? DB::table('akd_skripsi_proposal')->where('id_skripsi', $skripsi->id)->where('nim', $nim)->orderBy('iterasi', 'desc')->first() : null;
 
-                if ($is_lulus_mk) {
+        $isSemproMatakuliah = $mhs && isset($mhs->ta_sempro_skema) && $mhs->ta_sempro_skema === 'matakuliah' && isset($mhs->ta_sempro_is_validated) && $mhs->ta_sempro_is_validated == 1;
+
+        if ($isSemproMatakuliah) {
+            $hasPassedMk = $this->checkSemproByMataKuliahLulus($nim, $mhs->kode_program_studi);
+            if ($hasPassedMk) {
+                if (!$sempro) {
                     $sempro = (object)[
                         'status' => 'lulus',
-                        'keterangan' => 'Lulus via Mata Kuliah: ' . $is_lulus_mk->nama_matakuliah,
-                        'tanggal_sempro' => $is_lulus_mk->created_at ?? now()
+                        'judul' => 'Proposal Matakuliah',
+                        'keterangan' => 'Lulus otomatis melalui perekaman nilai mata kuliah Seminar Proposal.'
                     ];
+                } else if ($sempro->status !== 'lulus') {
+                    $sempro = (object)array_merge((array)$sempro, [
+                        'status' => 'lulus',
+                        'keterangan' => 'Lulus otomatis melalui perekaman nilai mata kuliah Seminar Proposal.'
+                    ]);
                 }
-            } else {
-                $sempro = $skripsi ? DB::table('akd_skripsi_proposal')->where('id_skripsi', $skripsi->id)->where('nim', $nim)->orderBy('iterasi', 'desc')->first() : null;
             }
         }
+
         $total_bimbingan = $skripsi ? DB::table('akd_skripsi_bimbingan')->where('id_skripsi', $skripsi->id)->whereIn('status', ['disetujui', 'revisi'])->count() : 0;
         $ujian = $skripsi ? DB::table('akd_skripsi_ujian')->where('id_skripsi', $skripsi->id)->first() : null;
 
@@ -686,7 +563,9 @@ class Mskripsi extends Model
                 'nama_ta' => $mhs->ta_nama_tugas_akhir ?? 'Skripsi',
                 'ada_sempro' => $mhs->ta_ada_sempro ?? 1,
                 'sks_min' => $mhs->ta_sks_minimal ?? 110,
-                'min_bimbingan' => $mhs->ta_minimal_bimbingan ?? 8
+                'min_bimbingan' => $mhs->ta_minimal_bimbingan ?? 8,
+                'ta_sempro_skema' => $mhs->ta_sempro_skema ?? 'skripsi',
+                'ta_sempro_is_validated' => $mhs->ta_sempro_is_validated ?? 1
             ],
             'akademik' => $stats,
             'pembayaran' => [
@@ -761,13 +640,18 @@ class Mskripsi extends Model
             return ['label' => 'Menunggu Ploting Pembimbing oleh Kaprodi', 'url' => '#', 'warna' => 'secondary', 'disabled' => true];
         }
 
+        // Check if Sempro is completed (status lulus)
+        $sempro_lulus = $sempro && $sempro->status === 'lulus';
+
+        if ($sempro_lulus && $total_bimbingan < $mhs->ta_minimal_bimbingan) {
+            return ['label' => 'Tambah Log Bimbingan (' . $total_bimbingan . '/' . $mhs->ta_minimal_bimbingan . ')', 'url' => 'skripsi/bimbingan', 'warna' => 'warning', 'disabled' => false];
+        }
+
         if ($skripsi->fase_aktif == 'bimbingan' && $total_bimbingan < $mhs->ta_minimal_bimbingan) {
             return ['label' => 'Tambah Log Bimbingan (' . $total_bimbingan . '/' . $mhs->ta_minimal_bimbingan . ')', 'url' => 'skripsi/bimbingan', 'warna' => 'warning', 'disabled' => false];
         }
 
-        if ($mhs->ta_ada_sempro && $skripsi && strtolower((string) ($skripsi->fase_aktif ?? '')) !== 'sempro') {
-            return ['label' => 'Menunggu ACC Sempro Pembimbing', 'url' => '#', 'warna' => 'secondary', 'disabled' => true];
-        }
+        // ACC Sempro Pembimbing check removed - students proceed directly to sempro registration
 
         if ($mhs->ta_ada_sempro && (!$sempro || $sempro->status == 'draft')) {
             return ['label' => 'Daftar Seminar Proposal', 'url' => 'skripsi/seminar', 'warna' => 'warning', 'disabled' => false];
@@ -814,6 +698,96 @@ class Mskripsi extends Model
         }
 
         return (int) $skripsi->{$field} === 1 ? 1 : 0;
+    }
+
+    /**
+     * Check if student has a grade in Seminar Proposal course
+     */
+    private function checkSemproGrade($nim)
+    {
+        $has_grade = DB::table('akd_transkrip as t')
+            ->join('akd_matakuliah as mk', 't.id_matakuliah', '=', 'mk.id_matakuliah')
+            ->where('t.nim', $nim)
+            ->where(function($query) {
+                $query->where('mk.nama_matakuliah', 'like', '%seminar proposal%')
+                      ->orWhere('mk.nama_matakuliah', 'like', '%sempro%')
+                      ->orWhere('mk.nama_matakuliah', 'like', '%seminar proposal%')
+                      ->orWhere('mk.nama_matakuliah', 'like', '%proposal%');
+            })
+            ->whereNotIn('t.nilai', ['D', 'E', 'E'])
+            ->count() > 0;
+
+        return $has_grade;
+    }
+
+    /**
+     * Check if student has passed the mapped Seminar Proposal course
+     */
+    private function checkSemproByMataKuliahLulus($nim, $kode_prodi)
+    {
+        $mappedMk = DB::table('akd_skripsi_sempro_mk')
+            ->where('kode_prodi', $kode_prodi)
+            ->pluck('id_matakuliah')
+            ->toArray();
+
+        if (empty($mappedMk)) {
+            return $this->checkSemproGrade($nim);
+        }
+
+        $has_grade = DB::table('akd_transkrip as t')
+            ->where('t.nim', $nim)
+            ->whereIn('t.id_matakuliah', $mappedMk)
+            ->whereNotIn('t.nilai', ['D', 'E', 'E'])
+            ->count() > 0;
+
+        return $has_grade;
+    }
+
+    /**
+     * Check if student has passed KKN based on active KRS or Transcript
+     */
+    private function checkKKNGrade($nim, $skripsi = null)
+    {
+        // 1. Check in akd_detail_krs
+        $has_grade_krs = DB::table('akd_detail_krs as dk')
+            ->join('akd_kelas_kuliah as c', 'dk.id_kelas', '=', 'c.id_kelas')
+            ->join('akd_penawaran_matakuliah as p', 'c.id_tawar', '=', 'p.id_tawar')
+            ->join('akd_matakuliah as mk', 'p.id_matakuliah', '=', 'mk.id_matakuliah')
+            ->join('akd_krs as k', 'dk.id_krs', '=', 'k.id_krs')
+            ->join('akd_heregistrasi as h', 'k.id_heregistrasi', '=', 'h.id_heregistrasi')
+            ->where('h.nim', $nim)
+            ->where(function($query) {
+                $query->where('mk.nama_matakuliah', 'like', '%kkn%')
+                      ->orWhere('mk.nama_matakuliah', 'like', '%kuliah kerja nyata%')
+                      ->orWhere('mk.nama_matakuliah', 'like', '%kuliah kerja lapangan%');
+            })
+            ->whereNotNull('dk.nilai_akhir_huruf')
+            ->whereNotIn('dk.nilai_akhir_huruf', ['', 'E', 'T', 'K'])
+            ->count() > 0;
+
+        if ($has_grade_krs) {
+            return true;
+        }
+
+        // 2. Fallback to akd_transkrip
+        $has_grade_transkrip = DB::table('akd_transkrip as t')
+            ->join('akd_matakuliah as mk', 't.id_matakuliah', '=', 'mk.id_matakuliah')
+            ->where('t.nim', $nim)
+            ->where(function($query) {
+                $query->where('mk.nama_matakuliah', 'like', '%kkn%')
+                      ->orWhere('mk.nama_matakuliah', 'like', '%kuliah kerja nyata%')
+                      ->orWhere('mk.nama_matakuliah', 'like', '%kuliah kerja lapangan%');
+            })
+            ->whereNotNull('t.nilai')
+            ->whereNotIn('t.nilai', ['', 'E', 'T'])
+            ->count() > 0;
+
+        if ($has_grade_transkrip) {
+            return true;
+        }
+
+        // 3. Ultimate fallback to the legacy flag in akd_skripsi table
+        return $this->getSkripsiFlag($skripsi, 'is_kkn') === 1;
     }
 
     /**

@@ -20,6 +20,7 @@ class AlterAkdProgramStudiTable extends Migration
             $table->string('ta_komponen_bayar', 100)->default('Bimbingan Skripsi')->comment('Nama komponen di keu_tagihan_mhs');
             $table->string('ta_komponen_bayar_ujian', 100)->default('Ujian Skripsi')->comment('Nama komponen ujian di keu_tagihan_mhs');
             $table->string('ta_nama_tugas_akhir', 50)->default('Skripsi')->comment('Label TA di UI, cth: Skripsi / Tugas Akhir');
+            $table->enum('ta_sempro_skema', ['AUTOMATIC', 'MANUAL'])->default('AUTOMATIC')->after('ta_ada_sempro');
         });
     }
 

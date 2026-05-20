@@ -30,6 +30,7 @@ Route::post('/akademik/import-nilai-uts', 'Akademik@import_nilai_uts')->name('im
 Route::post('/akademik/import-nilai-uas', 'Akademik@import_nilai_uas')->name('import_nilai_uas');
 
 Route::get('/akademik/template-presensi', 'Akademik@templatepresensiexport')->name('templatepresensiexport');
+Route::get('/akademik/pkkmb/template', 'Akademik@pkkmbTemplate')->name('akpkkmbTemplate');
 Route::get("/akademik/download-bantuan", "Akademik@download_bantuan")->name('dsndownload_bantuan');
 Route::get("/mahasiswa/download-bantuan-mhs", "Akademik@download_bantuan_mhs")->name('mhsdownload_bantuan');
 Route::middleware(['jwtverifie'])->group(function () {

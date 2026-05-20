@@ -2747,4 +2747,48 @@ class Akademik extends Controller
             return response()->json(['error' => ['Gagal memproses file Excel: ' . $e->getMessage()]]);
         }
     }
+
+    public function pkkmbTemplate()
+    {
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        
+        // Header Kolom
+        $sheet->setCellValue('A1', 'NIM');
+        $sheet->setCellValue('B1', 'Status Lulus (1=Lulus | 0=Belum)');
+        $sheet->setCellValue('C1', 'Tahun Pelaksanaan');
+        $sheet->setCellValue('D1', 'Nomor Sertifikat');
+        $sheet->setCellValue('E1', 'Keterangan');
+        
+        // Contoh Baris Data (Sample Rows)
+        $sheet->setCellValue('A2', '2021010001');
+        $sheet->setCellValue('B2', '1');
+        $sheet->setCellValue('C2', '2021');
+        $sheet->setCellValue('D2', 'PKKMB/2021/0001');
+        $sheet->setCellValue('E2', 'Contoh baris data 1 (Lulus)');
+        
+        $sheet->setCellValue('A3', '2021010002');
+        $sheet->setCellValue('B3', '0');
+        $sheet->setCellValue('C3', '2021');
+        $sheet->setCellValue('D3', '');
+        $sheet->setCellValue('E3', 'Contoh baris data 2 (Belum Lulus)');
+        
+        // Format NIM sebagai teks agar tidak menghilangkan angka 0 di depan
+        $sheet->getStyle('A')->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
+        
+        // Auto-size kolom
+        foreach (range('A', 'E') as $col) {
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
+        
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $filename = 'template_import_pkkmb.xlsx';
+        
+        return response()->streamDownload(function() use ($writer) {
+            $writer->save('php://output');
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Cache-Control' => 'max-age=0',
+        ]);
+    }
 }

@@ -30,6 +30,7 @@ class SkripsiKaprodi extends Controller
                 's.judul',
                 's.topik',
                 's.status',
+                DB::raw("CASE WHEN s.target_luaran IS NOT NULL AND s.target_luaran != 'buku_skripsi' THEN 1 ELSE 0 END as is_obe"),
                 DB::raw("CONCAT_WS(' ', p1.gelar_depan, p1.nama, p1.gelar_belakang) as nama_pembimbing1"),
                 DB::raw("CONCAT_WS(' ', p2.gelar_depan, p2.nama, p2.gelar_belakang) as nama_pembimbing2"),
                 's.id_dosen_pembimbing1',
@@ -118,9 +119,9 @@ class SkripsiKaprodi extends Controller
         DB::table('akd_skripsi_ujian')
             ->where('id_skripsi', $request->id_skripsi)
             ->update([
-                'tgl_ujian' => $request->tgl_ujian,
-                'jam_ujian' => $request->jam_ujian,
-                'ruang_ujian' => $request->ruang_ujian,
+                'tanggal_ujian' => $request->tgl_ujian,
+                'jam_mulai' => $request->jam_ujian,
+                'ruang' => $request->ruang_ujian,
                 'id_penguji1' => $request->id_penguji1,
                 'id_penguji2' => $request->id_penguji2,
                 'id_penguji3' => $request->id_penguji3,
@@ -137,6 +138,27 @@ class SkripsiKaprodi extends Controller
             ]);
 
         return response()->json(['success' => 'Jadwal Ujian Akhir berhasil diplot']);
+    }
+
+    public function get_jadwal_ujian($id_skripsi)
+    {
+        $ujian = DB::table('akd_skripsi_ujian as u')
+            ->leftJoin('simpeg_pegawai as peg1', 'u.id_penguji1', '=', 'peg1.id')
+            ->leftJoin('simpeg_pegawai as peg2', 'u.id_penguji2', '=', 'peg2.id')
+            ->leftJoin('simpeg_pegawai as peg3', 'u.id_penguji3', '=', 'peg3.id')
+            ->select(
+                'u.*',
+                DB::raw("CONCAT_WS(' ', peg1.gelar_depan, peg1.nama, peg1.gelar_belakang) as nama_penguji1"),
+                DB::raw("CONCAT_WS(' ', peg2.gelar_depan, peg2.nama, peg2.gelar_belakang) as nama_penguji2"),
+                DB::raw("CONCAT_WS(' ', peg3.gelar_depan, peg3.nama, peg3.gelar_belakang) as nama_penguji3")
+            )
+            ->where('u.id_skripsi', $id_skripsi)
+            ->first();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $ujian
+        ]);
     }
 
     public function list_siap_sk(Request $request)
@@ -206,9 +228,26 @@ class SkripsiKaprodi extends Controller
 
         DB::beginTransaction();
         try {
+            // Logika Increment Otomatis untuk Nomor Surat Tugas
+            $baseNoST = $request->no_surat_tugas;
+            $prefix = '';
+            $currentNum = 0;
+            $suffix = '';
+            $padding = 0;
+            $isIncrementable = false;
+
+            // Regex: Mencari grup angka terakhir sebelum karakter non-angka/slash (seperti 4 di 11.4/ST)
+            if (preg_match('/^(.*?)(\d+)(\/ST\/.*|$)/', $baseNoST, $matches)) {
+                $prefix = $matches[1];
+                $currentNum = (int)$matches[2];
+                $suffix = $matches[3];
+                $padding = strlen($matches[2]); // Menjaga format leading zero (misal 004 -> 005)
+                $isIncrementable = true;
+            }
+
             $id_sk = DB::table('akd_skripsi_sk')->insertGetId([
                 'no_sk' => $request->no_sk,
-                'no_surat_tugas' => $request->no_surat_tugas,
+                'no_surat_tugas' => $baseNoST, // Simpan nomor awal sebagai referensi batch
                 'tgl_sk' => $request->tgl_sk,
                 'kode_prodi' => $request->kode_prodi,
                 'tahun_akademik' => $request->tahun_akademik,
@@ -227,10 +266,19 @@ class SkripsiKaprodi extends Controller
 
             // Save to detail history table
             $detail_records = [];
-            foreach ($request->id_skripsi as $id_skripsi) {
+            foreach ($request->id_skripsi as $index => $id_skripsi) {
+                $generatedNoST = $baseNoST;
+                if ($isIncrementable) {
+                    // Hitung nomor untuk mahasiswa ke-n
+                    $nextNum = $currentNum + $index;
+                    $formattedNum = str_pad($nextNum, $padding, '0', STR_PAD_LEFT);
+                    $generatedNoST = $prefix . $formattedNum . $suffix;
+                }
+
                 $detail_records[] = [
                     'id_sk' => $id_sk,
                     'id_skripsi' => $id_skripsi,
+                    'no_surat_tugas' => $generatedNoST, // Menyimpan nomor unik per mahasiswa
                     'created_at' => now(),
                     'updated_at' => now()
                 ];
@@ -258,18 +306,49 @@ class SkripsiKaprodi extends Controller
             return response()->json(['error' => $validation->errors()->all()], 422);
         }
 
+        DB::beginTransaction();
         try {
+            // Logika Increment untuk update (Sama seperti saat simpan baru)
+            $baseNoST = $request->no_surat_tugas;
+            $prefix = '';
+            $currentNum = 0;
+            $suffix = '';
+            $padding = 0;
+            $isIncrementable = false;
+
+            if (preg_match('/^(.*?)(\d+)(\/ST\/.*|$)/', $baseNoST, $matches)) {
+                $prefix = $matches[1];
+                $currentNum = (int)$matches[2];
+                $suffix = $matches[3];
+                $padding = strlen($matches[2]);
+                $isIncrementable = true;
+            }
+
             DB::table('akd_skripsi_sk')
                 ->where('id', $request->id)
                 ->update([
                     'no_sk' => $request->no_sk,
-                    'no_surat_tugas' => $request->no_surat_tugas,
+                    'no_surat_tugas' => $baseNoST,
                     'tgl_sk' => $request->tgl_sk, // Menambahkan tgl_sk ke dalam data yang diperbarui
                     'updated_at' => now()
                 ]);
 
-            return response()->json(['success' => 'Data SK berhasil diperbarui.']);
+            // Sinkronisasi nomor surat tugas individu di tabel detail
+            $details = DB::table('akd_skripsi_sk_detail')->where('id_sk', $request->id)->orderBy('id', 'asc')->get();
+            foreach ($details as $index => $det) {
+                $generatedNoST = $baseNoST;
+                if ($isIncrementable) {
+                    $nextNum = $currentNum + $index;
+                    $formattedNum = str_pad($nextNum, $padding, '0', STR_PAD_LEFT);
+                    $generatedNoST = $prefix . $formattedNum . $suffix;
+                }
+                DB::table('akd_skripsi_sk_detail')->where('id', $det->id)->update(['no_surat_tugas' => $generatedNoST]);
+            }
+
+            DB::commit();
+            return response()->json(['success' => 'Data SK dan Nomor Surat Tugas individu berhasil diperbarui.']);
         } catch (\Exception $e) {
+            DB::rollBack();
             return response()->json(['error' => 'Gagal memperbarui SK: ' . $e->getMessage()], 500);
         }
     }
@@ -334,6 +413,7 @@ class SkripsiKaprodi extends Controller
                 's.judul',
                 DB::raw("CONCAT_WS(' ', p1.gelar_depan, p1.nama, p1.gelar_belakang) as nama_p1"),
                 DB::raw("CONCAT_WS(' ', p2.gelar_depan, p2.nama, p2.gelar_belakang) as nama_p2"),
+                'skd.no_surat_tugas as no_st_ind', // Ambil nomor individu
                 'p1.id as nip_p1',
                 'p2.id as nip_p2'
             )
@@ -482,5 +562,98 @@ class SkripsiKaprodi extends Controller
         $message = $request->status == 1 ? 'Konfigurasi Sempro berhasil disetujui (Aktif)' : 'Konfigurasi Sempro ditolak (Pending)';
 
         return response()->json(['status' => 'success', 'message' => $message]);
+    }
+
+    /**
+     * Get CPMK Rubrics for Kaprodi Config
+     */
+    public function get_rubrik_cpmk($kode_prodi)
+    {
+        $rows = DB::table('akd_skripsi_rubrik_cpmk')
+            ->where('kode_prodi', $kode_prodi)
+            ->orderBy('kode_cpmk', 'asc')
+            ->get();
+
+        // If empty, fetch default ones (where kode_prodi is null)
+        if ($rows->count() == 0) {
+            $rows = DB::table('akd_skripsi_rubrik_cpmk')
+                ->whereNull('kode_prodi')
+                ->orderBy('kode_cpmk', 'asc')
+                ->get();
+        }
+
+        // Include mapped CPLs for each CPMK
+        foreach ($rows as $r) {
+            $cpl = DB::table('akd_skripsi_cpmk_cpl')
+                ->where('id_cpmk', $r->id)
+                ->first();
+            $r->kode_cpl = $cpl ? $cpl->kode_cpl : '';
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $rows
+        ]);
+    }
+
+    /**
+     * Save CPMK Rubrics Config for Kaprodi
+     */
+    public function save_rubrik_cpmk(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'kode_prodi' => 'required',
+            'rubrik' => 'required|array', // array of { id_cpmk/new, kode_cpmk, nama_cpmk, bobot, kode_cpl }
+        ]);
+
+        if ($v->fails()) return response()->json(['error' => $v->errors()->all()], 422);
+
+        $kode_prodi = $request->kode_prodi;
+        $total_bobot = 0;
+        foreach ($request->rubrik as $r) {
+            $total_bobot += floatval($r['bobot'] ?? 0);
+        }
+
+        if (abs($total_bobot - 100.00) > 0.01) {
+            return response()->json(['error' => 'Total bobot rubrik harus tepat 100% (saat ini: ' . $total_bobot . '%)'], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            // Drop existing custom rubrics & CPL maps for this prodi
+            $old_rubrics = DB::table('akd_skripsi_rubrik_cpmk')->where('kode_prodi', $kode_prodi)->get();
+            $old_ids = $old_rubrics->pluck('id')->toArray();
+            
+            DB::table('akd_skripsi_cpmk_cpl')->whereIn('id_cpmk', $old_ids)->delete();
+            DB::table('akd_skripsi_rubrik_cpmk')->where('kode_prodi', $kode_prodi)->delete();
+
+            // Insert new custom rubrics
+            $now = now();
+            foreach ($request->rubrik as $r) {
+                $id = DB::table('akd_skripsi_rubrik_cpmk')->insertGetId([
+                    'kode_cpmk' => $r['kode_cpmk'],
+                    'nama_cpmk' => $r['nama_cpmk'],
+                    'bobot' => floatval($r['bobot']),
+                    'kode_prodi' => $kode_prodi,
+                    'created_at' => $now,
+                    'updated_at' => $now
+                ]);
+
+                if (!empty($r['kode_cpl'])) {
+                    DB::table('akd_skripsi_cpmk_cpl')->insert([
+                        'id_cpmk' => $id,
+                        'kode_cpl' => $r['kode_cpl'],
+                        'created_at' => $now,
+                        'updated_at' => $now
+                    ]);
+                }
+            }
+
+            DB::commit();
+            return response()->json(['success' => 'Rubrik CPMK berhasil disimpan']);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 }

@@ -407,12 +407,33 @@ class Skripsi extends Controller
         if (!$skripsi) return response()->json(['error' => 'Data skripsi tidak ditemukan'], 404);
 
         $luaran = DB::table('akd_skripsi_luaran')->where('id_skripsi', $skripsi->id)->first();
+        $ujian = DB::table('akd_skripsi_ujian')
+            ->where('id_skripsi', $skripsi->id)
+            ->where('nim', $nim)
+            ->orderBy('updated_at', 'desc')
+            ->first();
+
+        $ujian_locked = $ujian && in_array($ujian->status, ['diajukan', 'dijadwalkan', 'lulus']);
+        $notice_message = null;
+
+        if ($ujian_locked) {
+            $notice_message = 'Data pendaftaran ujian Anda sudah pernah dikirim dan sedang diproses. Anda tidak perlu mengisi ulang form ini.';
+        } elseif ($ujian) {
+            $notice_message = 'Kami menemukan data pendadaran yang sudah tersimpan sebelumnya. Anda dapat melanjutkan dari data yang ada.';
+        } elseif ($luaran) {
+            $notice_message = 'Realisasi luaran Anda sudah tersimpan sebelumnya. Silakan periksa kembali sebelum melanjutkan.';
+        }
         
         return response()->json([
             'status' => 'success',
             'data' => [
                 'target_luaran' => $skripsi->target_luaran,
-                'luaran' => $luaran
+                'luaran' => $luaran,
+                'ujian' => $ujian,
+                'luaran_sudah_diisi' => (bool) $luaran,
+                'ujian_sudah_diisi' => (bool) $ujian,
+                'ujian_locked' => $ujian_locked,
+                'notice_message' => $notice_message,
             ]
         ]);
     }
@@ -485,6 +506,14 @@ class Skripsi extends Controller
             ->where('nim', $nim)
             ->first();
 
+        if ($ujian && in_array($ujian->status, ['diajukan', 'dijadwalkan', 'lulus'])) {
+            return response()->json(['error' => 'Pendaftaran ujian sudah diajukan sebelumnya.'], 409);
+        }
+
+        if ($ujian && $ujian->status === 'pending') {
+            return response()->json(['error' => 'Data pendaftaran ujian Anda sudah tersimpan sebelumnya. Silakan lanjutkan dari data yang ada.'], 409);
+        }
+
         if (!$ujian) {
             // Ambil proposal/naskah terakhir jika ada
             $latestProposal = DB::table('akd_skripsi_proposal')
@@ -506,10 +535,6 @@ class Skripsi extends Controller
             ]);
 
             $ujian = DB::table('akd_skripsi_ujian')->where('id', $ujianId)->first();
-        }
-
-        if (in_array($ujian->status, ['diajukan', 'dijadwalkan', 'lulus'])) {
-            return response()->json(['error' => 'Pendaftaran ujian sudah diajukan sebelumnya.'], 409);
         }
 
         // Update judul jika dikirimkan dari form pendaftaran ujian

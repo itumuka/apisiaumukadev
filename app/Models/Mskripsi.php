@@ -17,8 +17,69 @@ class Mskripsi extends Model
         // 1. Profil Mahasiswa
         $mhs = DB::table('akd_mahasiswa')
             ->join('akd_program_studi', 'akd_mahasiswa.kode_program_studi', '=', 'akd_program_studi.kode_program_studi')
-            ->select('akd_mahasiswa.nim', 'akd_mahasiswa.kode_program_studi', 'akd_program_studi.kode_jenjang_pendidikan', 'akd_mahasiswa.status_mhs')
+            ->select(
+                'akd_mahasiswa.nim',
+                'akd_mahasiswa.no_pendaftaran',
+                'akd_mahasiswa.kode_program_studi',
+                'akd_program_studi.kode_jenjang_pendidikan',
+                'akd_mahasiswa.status_mhs',
+                'akd_mahasiswa.nik_mhs',
+                'akd_mahasiswa.tempat_lahir',
+                'akd_mahasiswa.tanggal_lahir',
+                'akd_mahasiswa.alamat_asal',
+                'akd_mahasiswa.kode_agama',
+                'akd_mahasiswa.jenis_kelamin',
+                'akd_mahasiswa.email',
+                'akd_mahasiswa.telp',
+                'akd_mahasiswa.kode_kewarganegaraan',
+                'akd_mahasiswa.kode_provinsi',
+                'akd_mahasiswa.kode_kabupaten',
+                'akd_mahasiswa.kode_kecamatan',
+                'akd_mahasiswa.kelurahan',
+                'akd_mahasiswa.rt',
+                'akd_mahasiswa.rw',
+                'akd_mahasiswa.kode_pos',
+                'akd_mahasiswa.kode_jenis_tinggal',
+                'akd_mahasiswa.kode_transportasi',
+                'akd_mahasiswa.kode_jalur_pendaftaran',
+                'akd_mahasiswa.kode_jenis_pendaftaran',
+                'akd_mahasiswa.nisn',
+                'akd_mahasiswa.pendidikan_terakhir',
+                'akd_mahasiswa.jurusan_slta',
+                'akd_mahasiswa.alamat_slta',
+                'akd_mahasiswa.no_ijazah_slta',
+                'akd_mahasiswa.tahun_ijazah_slta',
+                'akd_mahasiswa.foto'
+            )
             ->where('nim', $nim)->first();
+
+        $ayah = DB::table('akd_ortu_ayah')
+            ->select(
+                'nim',
+                'nik_ayah',
+                'nama as nama_ayah',
+                'tgl_lahir as tgl_lahir_ayah',
+                'pendidikan_id as pendidikan_id_ayah',
+                'kode_penghasilan as kode_penghasilan_ayah',
+                'telepon_ayah',
+                'kode_pekerjaan as kode_pekerjaan_ayah'
+            )
+            ->where('nim', $nim)
+            ->first();
+
+        $ibu = DB::table('akd_ortu_ibu')
+            ->select(
+                'nim',
+                'nik_ibu',
+                'nama as nama_ibu',
+                'tgl_lahir as tgl_lahir_ibu',
+                'pendidikan_id as pendidikan_id_ibu',
+                'kode_penghasilan as kode_penghasilan_ibu',
+                'telepon_ibu',
+                'kode_pekerjaan as kode_pekerjaan_ibu'
+            )
+            ->where('nim', $nim)
+            ->first();
 
         $skripsi = DB::table('akd_skripsi')->where('nim', $nim)->first();
         $flag_pkkmb = 0;
@@ -58,11 +119,107 @@ class Mskripsi extends Model
         $total_e = $stats['total_e'];
         $total_bimbingan_valid = 0;
 
+        $profile_sections = [
+            'Personal' => [
+                ['object' => $mhs, 'field' => 'nik_mhs', 'label' => 'NIK'],
+                ['object' => $mhs, 'field' => 'tempat_lahir', 'label' => 'Tempat lahir'],
+                ['object' => $mhs, 'field' => 'tanggal_lahir', 'label' => 'Tanggal lahir'],
+                ['object' => $mhs, 'field' => 'alamat_asal', 'label' => 'Alamat'],
+                ['object' => $mhs, 'field' => 'kode_agama', 'label' => 'Agama'],
+                ['object' => $mhs, 'field' => 'jenis_kelamin', 'label' => 'Jenis kelamin'],
+                ['object' => $mhs, 'field' => 'email', 'label' => 'Email'],
+                ['object' => $mhs, 'field' => 'telp', 'label' => 'No. telepon'],
+                ['object' => $mhs, 'field' => 'kode_kewarganegaraan', 'label' => 'Kewarganegaraan'],
+                ['object' => $mhs, 'field' => 'kode_provinsi', 'label' => 'Provinsi'],
+                ['object' => $mhs, 'field' => 'kode_kabupaten', 'label' => 'Kabupaten'],
+                ['object' => $mhs, 'field' => 'kode_kecamatan', 'label' => 'Kecamatan'],
+                ['object' => $mhs, 'field' => 'kelurahan', 'label' => 'Kelurahan'],
+                ['object' => $mhs, 'field' => 'rt', 'label' => 'RT'],
+                ['object' => $mhs, 'field' => 'rw', 'label' => 'RW'],
+                ['object' => $mhs, 'field' => 'kode_pos', 'label' => 'Kode pos'],
+                ['object' => $mhs, 'field' => 'kode_jenis_tinggal', 'label' => 'Jenis tinggal'],
+                ['object' => $mhs, 'field' => 'kode_transportasi', 'label' => 'Transportasi'],
+                ['object' => $mhs, 'field' => 'kode_jalur_pendaftaran', 'label' => 'Jalur pendaftaran'],
+                ['object' => $mhs, 'field' => 'kode_jenis_pendaftaran', 'label' => 'Jenis pendaftaran'],
+                ['object' => $mhs, 'field' => 'nisn', 'label' => 'NISN'],
+            ],
+            'Pendidikan Terakhir' => [
+                ['object' => $mhs, 'field' => 'pendidikan_terakhir', 'label' => 'Pendidikan terakhir'],
+                ['object' => $mhs, 'field' => 'jurusan_slta', 'label' => 'Jurusan'],
+                ['object' => $mhs, 'field' => 'alamat_slta', 'label' => 'Alamat sekolah'],
+                ['object' => $mhs, 'field' => 'no_ijazah_slta', 'label' => 'Nomor ijazah'],
+                ['object' => $mhs, 'field' => 'tahun_ijazah_slta', 'label' => 'Tahun ijazah'],
+            ],
+            'Ayah' => [
+                ['object' => $ayah, 'field' => 'nik_ayah', 'label' => 'NIK ayah'],
+                ['object' => $ayah, 'field' => 'nama_ayah', 'label' => 'Nama ayah'],
+                ['object' => $ayah, 'field' => 'tgl_lahir_ayah', 'label' => 'Tanggal lahir ayah'],
+                ['object' => $ayah, 'field' => 'kode_pekerjaan_ayah', 'label' => 'Pekerjaan ayah'],
+                ['object' => $ayah, 'field' => 'pendidikan_id_ayah', 'label' => 'Pendidikan ayah'],
+                ['object' => $ayah, 'field' => 'kode_penghasilan_ayah', 'label' => 'Penghasilan ayah'],
+                ['object' => $ayah, 'field' => 'telepon_ayah', 'label' => 'No. telepon ayah'],
+            ],
+            'Ibu' => [
+                ['object' => $ibu, 'field' => 'nik_ibu', 'label' => 'NIK ibu'],
+                ['object' => $ibu, 'field' => 'nama_ibu', 'label' => 'Nama ibu'],
+                ['object' => $ibu, 'field' => 'tgl_lahir_ibu', 'label' => 'Tanggal lahir ibu'],
+                ['object' => $ibu, 'field' => 'kode_pekerjaan_ibu', 'label' => 'Pekerjaan ibu'],
+                ['object' => $ibu, 'field' => 'pendidikan_id_ibu', 'label' => 'Pendidikan ibu'],
+                ['object' => $ibu, 'field' => 'kode_penghasilan_ibu', 'label' => 'Penghasilan ibu'],
+                ['object' => $ibu, 'field' => 'telepon_ibu', 'label' => 'No. telepon ibu'],
+            ],
+            'Upload Foto' => [
+                ['object' => $mhs, 'field' => 'foto', 'label' => 'Foto profil'],
+            ],
+        ];
+
+        $profile_complete = true;
+        $missing_profile = [];
+        $index = 1;
+
+        foreach ($profile_sections as $section_name => $fields) {
+            $missing_fields = [];
+
+            foreach ($fields as $field_info) {
+                $source = $field_info['object'];
+                $value = $source ? ($source->{$field_info['field']} ?? null) : null;
+                $is_empty = is_null($value) || trim((string) $value) === '';
+
+                if ($is_empty) {
+                    $missing_fields[] = $field_info['label'];
+                }
+            }
+
+            if (!empty($missing_fields)) {
+                $profile_complete = false;
+                $missing_profile[] = $section_name . ' (' . implode(', ', $missing_fields) . ')';
+            }
+        }
+
         if (in_array($fase, ['sempro', 'ujian']) && $prodiConfig) {
             $total_bimbingan_valid = DB::table('akd_skripsi_bimbingan')
                 ->where('nim', $nim)
                 ->whereIn('status', ['disetujui', 'revisi'])
                 ->count();
+        }
+
+        if ($fase == 'ujian') {
+            $semua_lolos = $profile_complete;
+
+            $hasil[] = [
+                'no' => $index++,
+                'id_syarat_prodi' => null,
+                'syarat' => 'Lengkapi Profil Mahasiswa',
+                'isi' => $profile_complete
+                    ? 'Seluruh tab profil sudah lengkap. Data mahasiswa siap dipakai untuk proses ujian dan pendadaran.'
+                    : 'Masih ada bagian profil yang perlu dilengkapi: ' . implode('; ', $missing_profile) . '.',
+                'hubungi' => 'Profil Mahasiswa / Bagian Akademik',
+                'status' => $profile_complete ? 'v' : 'x',
+                'jenis' => 'sistem',
+                'is_wajib' => 1,
+                'tipe_upload' => null,
+                'kode_syarat' => 'BIODATA_LENGKAP'
+            ];
         }
         
         // If no syarat from table, create from prodi config

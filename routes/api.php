@@ -404,10 +404,14 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::post("/mahasiswa/skripsi/simpan-proposal", "Skripsi@simpan_proposal")->name('skripsi_simpan_proposal');
     Route::post("/mahasiswa/skripsi/upload-naskah", "Skripsi@upload_naskah")->name('skripsi_upload_naskah');
     Route::post("/mahasiswa/skripsi/ajukan-sempro", "Skripsi@ajukan_sempro")->name('skripsi_ajukan_sempro');
+    Route::post("/mahasiswa/skripsi/ajukan-ujian", "Skripsi@ajukan_ujian")->name('skripsi_ajukan_ujian');
     Route::post("/mahasiswa/skripsi/hapus-naskah", "Skripsi@hapus_naskah")->name('skripsi_hapus_naskah');
     Route::post("/mahasiswa/skripsi/upload-berkas", "Skripsi@upload_berkas")->name('skripsi_upload_berkas');
     Route::get("/mahasiswa/skripsi/log-bimbingan", "Skripsi@log_bimbingan")->name('skripsi_mhs_log_bimbingan');
     Route::post("/mahasiswa/skripsi/tambah-bimbingan", "Skripsi@tambah_bimbingan")->name('skripsi_mhs_tambah_bimbingan');
+    Route::get("/mahasiswa/skripsi/get-luaran", "Skripsi@get_luaran")->name('skripsi_get_luaran');
+    Route::post("/mahasiswa/skripsi/simpan-luaran", "Skripsi@simpan_luaran")->name('skripsi_simpan_luaran');
+    Route::get("/mahasiswa/skripsi/portofolio-cpl", "Skripsi@get_portofolio_cpl")->name('skripsi_portofolio_cpl');
     // Admin Rekap Bimbingan
     Route::get("/akademik/rekap-bimbingan", "Skripsi@rekap_bimbingan")->name('skripsi_rekap_bimbingan');
     
@@ -416,6 +420,7 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::post("/kaprodi/skripsi/plot-pembimbing", "SkripsiKaprodi@plot_pembimbing")->name('skripsi_kaprodi_plot_pembimbing');
     Route::post("/kaprodi/skripsi/plot-jadwal-sempro", "SkripsiKaprodi@plot_jadwal_sempro")->name('skripsi_kaprodi_plot_sempro');
     Route::post("/kaprodi/skripsi/plot-jadwal-ujian", "SkripsiKaprodi@plot_jadwal_ujian")->name('skripsi_kaprodi_plot_ujian');
+    Route::get("/kaprodi/skripsi/get-jadwal-ujian/{id_skripsi}", "SkripsiKaprodi@get_jadwal_ujian")->name('skripsi_kaprodi_get_jadwal_ujian');
     
     // SK Kolektif (Dekanat/Kaprodi)
     Route::get("/kaprodi/skripsi/list-siap-sk", "SkripsiKaprodi@list_siap_sk")->name('skripsi_list_siap_sk');
@@ -423,17 +428,25 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::get("/kaprodi/skripsi/list-sk-terbit", "SkripsiKaprodi@list_sk_terbit")->name('skripsi_list_sk_terbit');
     Route::get("/kaprodi/skripsi/get-sk-detail/{id}", "SkripsiKaprodi@get_sk_detail")->name('skripsi_get_sk_detail');
     Route::post("/kaprodi/skripsi/update-sk", "SkripsiKaprodi@update_sk")->name('skripsi_update_sk');
-    
-    // Konfigurasi Sempro
+
+    // Konfigurasi Sempro & CPMK Rubrik
     Route::get("/kaprodi/skripsi/config-sempro/{kode_prodi}", "SkripsiKaprodi@get_config_sempro")->name('skripsi_kaprodi_get_config_sempro');
     Route::post("/kaprodi/skripsi/update-config-sempro", "SkripsiKaprodi@update_config_sempro")->name('skripsi_kaprodi_update_config_sempro');
+    Route::get("/kaprodi/skripsi/get-rubrik-cpmk/{kode_prodi}", "SkripsiKaprodi@get_rubrik_cpmk")->name('skripsi_kaprodi_get_rubrik_cpmk');
+    Route::post("/kaprodi/skripsi/save-rubrik-cpmk", "SkripsiKaprodi@save_rubrik_cpmk")->name('skripsi_kaprodi_save_rubrik_cpmk');
     Route::get("/kaprodi/skripsi/search-matakuliah", "SkripsiKaprodi@search_matakuliah")->name('skripsi_kaprodi_search_matakuliah');
     Route::get("/akademik/skripsi/list-config-sempro", "SkripsiKaprodi@list_config_sempro")->name('skripsi_admin_list_config_sempro');
     Route::post("/akademik/skripsi/validate-config-sempro", "SkripsiKaprodi@validate_config_sempro")->name('skripsi_admin_validate_config_sempro');
 
-     // Modul Skripsi Dosen Pembimbing
+    // Modul Skripsi Dosen Pembimbing
     Route::get("/dosen/skripsi/dashboard", "SkripsiDosen@dashboard")->name('skripsi_dosen_dashboard');
     Route::get("/dosen/skripsi/log-bimbingan", "SkripsiDosen@log_bimbingan")->name('skripsi_dosen_log_bimbingan');
     Route::post("/dosen/skripsi/validasi-bimbingan", "SkripsiDosen@validasi_bimbingan")->name('skripsi_dosen_validasi_bimbingan');
     Route::post("/dosen/skripsi/acc-ujian", "SkripsiDosen@acc_ujian")->name('skripsi_dosen_acc_ujian');
+
+    // Modul Penilaian Ujian OBE Dosen
+    Route::get("/dosen/skripsi/list-mahasiswa-diuji", "SkripsiDosen@list_mahasiswa_diuji")->name('skripsi_dosen_list_mahasiswa_diuji');
+    Route::get("/dosen/skripsi/get-rubrik-cpmk", "SkripsiDosen@get_rubrik_cpmk")->name('skripsi_dosen_get_rubrik_cpmk');
+    Route::get("/dosen/skripsi/get-nilai-ujian-cpmk", "SkripsiDosen@get_nilai_ujian_cpmk")->name('skripsi_dosen_get_nilai_ujian_cpmk');
+    Route::post("/dosen/skripsi/simpan-nilai-ujian-cpmk", "SkripsiDosen@simpan_nilai_ujian_cpmk")->name('skripsi_dosen_simpan_nilai_ujian_cpmk');
 });

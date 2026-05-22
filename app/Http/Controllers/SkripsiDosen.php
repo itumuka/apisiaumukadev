@@ -291,7 +291,23 @@ class SkripsiDosen extends Controller
 
         $examiners = array_filter([$ujian->id_penguji1, $ujian->id_penguji2, $ujian->id_penguji3]);
         
-        $rubrics = DB::table('akd_skripsi_rubrik_cpmk')->get()->keyBy('id');
+        $mhs = DB::table('akd_mahasiswa')->where('nim', $ujian->nim)->first();
+        $kode_prodi = $mhs ? $mhs->kode_program_studi : null;
+
+        $rubrics_list = collect();
+        if ($kode_prodi) {
+            $rubrics_list = DB::table('akd_skripsi_rubrik_cpmk')
+                ->where('kode_prodi', $kode_prodi)
+                ->get();
+        }
+
+        if ($rubrics_list->isEmpty()) {
+            $rubrics_list = DB::table('akd_skripsi_rubrik_cpmk')
+                ->whereNull('kode_prodi')
+                ->get();
+        }
+
+        $rubrics = $rubrics_list->keyBy('id');
 
         $examiner_scores = [];
         foreach ($examiners as $ex_id) {

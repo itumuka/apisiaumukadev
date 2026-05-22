@@ -548,10 +548,28 @@ class Mskripsi extends Model
         }
 
         $total_bimbingan = $skripsi ? DB::table('akd_skripsi_bimbingan')->where('id_skripsi', $skripsi->id)->whereIn('status', ['disetujui', 'revisi'])->count() : 0;
-        $ujian = $skripsi ? DB::table('akd_skripsi_ujian')->where('id_skripsi', $skripsi->id)->first() : null;
+
+        // Ambil ujian dengan detail nama penguji (untuk card jadwal di dashboard)
+        $ujian = null;
+        $ujian_detail = null;
+        if ($skripsi) {
+            $ujian_detail = DB::table('akd_skripsi_ujian as u')
+                ->leftJoin('simpeg_pegawai as p1', 'u.id_penguji1', '=', 'p1.id')
+                ->leftJoin('simpeg_pegawai as p2', 'u.id_penguji2', '=', 'p2.id')
+                ->leftJoin('simpeg_pegawai as p3', 'u.id_penguji3', '=', 'p3.id')
+                ->select(
+                    'u.*',
+                    DB::raw("CONCAT_WS(' ', p1.gelar_depan, p1.nama, p1.gelar_belakang) as nama_penguji1"),
+                    DB::raw("CONCAT_WS(' ', p2.gelar_depan, p2.nama, p2.gelar_belakang) as nama_penguji2"),
+                    DB::raw("CONCAT_WS(' ', p3.gelar_depan, p3.nama, p3.gelar_belakang) as nama_penguji3")
+                )
+                ->where('u.id_skripsi', $skripsi->id)
+                ->first();
+            $ujian = $ujian_detail; // alias
+        }
 
         // 6. Logika CTA
-        $cta = $this->calculateCTA($mhs, $bayar_ta, $skripsi, $sempro, $total_bimbingan, $bayar_ujian, $ujian, $stats);
+        $cta = $this->calculateCTA($mhs, $bayar_ta, $skripsi, $sempro, $total_bimbingan, $bayar_ujian, $ujian, $stats, $ujian_detail);
 
         return [
             'mhs' => [
@@ -620,7 +638,7 @@ class Mskripsi extends Model
         "))->count();
     }
 
-    private function calculateCTA($mhs, $bayar_ta, $skripsi, $sempro, $total_bimbingan, $bayar_ujian, $ujian, $stats)
+    private function calculateCTA($mhs, $bayar_ta, $skripsi, $sempro, $total_bimbingan, $bayar_ujian, $ujian, $stats, $ujian_detail = null)
     {
         $min_bimbingan_ujian = 8;
 
@@ -671,11 +689,50 @@ class Mskripsi extends Model
         }
 
         if ($ujian && $ujian->status == 'dijadwalkan') {
-            return ['label' => 'Lihat Jadwal Ujian Sidang', 'url' => 'mahasiswa/skripsi/ujian', 'warna' => 'info', 'disabled' => false];
+            $today = date('Y-m-d');
+            $tgl_ujian = $ujian->tanggal_ujian;
+
+            // Build schedule extra_data for the info card
+            $extra_data = null;
+            if ($ujian_detail) {
+                $penguji = [];
+                if ($ujian_detail->id_penguji1 && !empty(trim($ujian_detail->nama_penguji1)))
+                    $penguji[] = ['nama' => trim($ujian_detail->nama_penguji1), 'peran' => 'Ketua Penguji'];
+                if ($ujian_detail->id_penguji2 && !empty(trim($ujian_detail->nama_penguji2)))
+                    $penguji[] = ['nama' => trim($ujian_detail->nama_penguji2), 'peran' => 'Penguji 2'];
+                if ($ujian_detail->id_penguji3 && !empty(trim($ujian_detail->nama_penguji3)))
+                    $penguji[] = ['nama' => trim($ujian_detail->nama_penguji3), 'peran' => 'Penguji 3'];
+
+                $extra_data = [
+                    'tgl_ujian'  => $tgl_ujian,
+                    'jam_mulai'  => $ujian_detail->jam_mulai,
+                    'jam_selesai'=> $ujian_detail->jam_selesai,
+                    'ruang'      => $ujian_detail->ruang,
+                    'penguji'    => $penguji,
+                ];
+            }
+
+            if ($today == $tgl_ujian) {
+                return ['label' => '🎙️ Sidang Sedang Berlangsung!', 'url' => '#', 'warna' => 'success', 'disabled' => true, 'extra_data' => $extra_data];
+            }
+
+            return ['label' => 'Lihat Detail Jadwal Sidang Anda', 'url' => '#', 'warna' => 'info', 'disabled' => true, 'extra_data' => $extra_data];
         }
 
-        if ($ujian && $ujian->status == 'lulus') {
+        if ($ujian && $ujian->status == 'dinilai') {
+            return ['label' => 'Menunggu Input Nilai dari Dosen Lain...', 'url' => '#', 'warna' => 'secondary', 'disabled' => true];
+        }
+
+        if ($ujian && $ujian->status == 'menunggu_penetapan') {
+            return ['label' => 'Menunggu Penetapan Nilai Resmi', 'url' => '#', 'warna' => 'info', 'disabled' => true];
+        }
+
+        if ($ujian && in_array($ujian->status, ['ditetapkan', 'lulus'])) {
             return ['label' => 'Selamat! Menuju Yudisium 🎓', 'url' => '#', 'warna' => 'success', 'disabled' => true];
+        }
+
+        if ($ujian && $ujian->status == 'tidak_lulus') {
+            return ['label' => 'Ujian Belum Lulus – Hubungi Pembimbing', 'url' => '#', 'warna' => 'danger', 'disabled' => true];
         }
 
         return ['label' => 'Cek Progress TA', 'url' => 'mahasiswa/skripsi', 'warna' => 'warning', 'disabled' => false];

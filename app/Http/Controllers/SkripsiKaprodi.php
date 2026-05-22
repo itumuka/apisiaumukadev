@@ -777,5 +777,152 @@ class SkripsiKaprodi extends Controller
         DB::table('akd_skripsi_syarat_prodi')->where('id', $id)->delete();
         return response()->json(['success' => 'Syarat berhasil dihapus.']);
     }
+
+    /**
+     * List mahasiswa yang siap ditetapkan nilainya oleh Kaprodi
+     */
+    public function list_penetapan_nilai(Request $request)
+    {
+        $kode_prodi = $request->kode_prodi;
+        if (!$kode_prodi) {
+            return response()->json(['error' => 'Parameter prodi tidak ditemukan'], 400);
+        }
+
+        $data = DB::table('akd_skripsi_ujian as u')
+            ->join('akd_skripsi as s', 'u.id_skripsi', '=', 's.id')
+            ->join('akd_mahasiswa as m', 'u.nim', '=', 'm.nim')
+            ->leftJoin('akd_skripsi_berita_acara as ba', 'u.id', '=', 'ba.id_skripsi_ujian')
+            ->leftJoin('simpeg_pegawai as p1', 'u.id_penguji1', '=', 'p1.id')
+            ->leftJoin('simpeg_pegawai as p2', 'u.id_penguji2', '=', 'p2.id')
+            ->leftJoin('simpeg_pegawai as p3', 'u.id_penguji3', '=', 'p3.id')
+            ->select(
+                'u.id as id_skripsi_ujian',
+                'u.id_skripsi',
+                'u.nim',
+                'm.nama_mahasiswa as nama_mhs',
+                's.judul',
+                'u.tanggal_ujian',
+                'u.status as status_ujian',
+                'ba.nilai_angka',
+                'ba.nilai_huruf',
+                'ba.status as status_ba',
+                'ba.setuju_penguji1',
+                'ba.setuju_penguji2',
+                'ba.setuju_penguji3',
+                DB::raw("CONCAT_WS(' ', p1.gelar_depan, p1.nama, p1.gelar_belakang) as nama_penguji1"),
+                DB::raw("CONCAT_WS(' ', p2.gelar_depan, p2.nama, p2.gelar_belakang) as nama_penguji2"),
+                DB::raw("CONCAT_WS(' ', p3.gelar_depan, p3.nama, p3.gelar_belakang) as nama_penguji3"),
+                'u.id_penguji1',
+                'u.id_penguji2',
+                'u.id_penguji3'
+            )
+            ->where('m.kode_program_studi', $kode_prodi)
+            ->whereIn('u.status', ['menunggu_penetapan', 'ditetapkan', 'lulus', 'tidak_lulus'])
+            ->get();
+
+        return response()->json($data);
+    }
+
+    /**
+     * Menetapkan nilai secara resmi oleh Kaprodi
+     */
+    public function tetapkan_nilai(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'id_skripsi_ujian' => 'required',
+            'status'           => 'required|in:lulus,tidak_lulus',
+        ]);
+
+        if ($v->fails()) {
+            return response()->json(['error' => $v->errors()->all()], 422);
+        }
+
+        $id_skripsi_ujian = $request->id_skripsi_ujian;
+        $status = $request->status;
+
+        $ujian = DB::table('akd_skripsi_ujian')->where('id', $id_skripsi_ujian)->first();
+        if (!$ujian) {
+            return response()->json(['error' => 'Data ujian tidak ditemukan.'], 404);
+        }
+
+        $ba = DB::table('akd_skripsi_berita_acara')->where('id_skripsi_ujian', $id_skripsi_ujian)->first();
+        if (!$ba) {
+            return response()->json(['error' => 'Berita Acara belum dibuat/nilai belum lengkap.'], 404);
+        }
+
+        // Ketiga penguji wajib ttd digital (tanggal tidak null)
+        if (!$ba->setuju_penguji1 || !$ba->setuju_penguji2 || !$ba->setuju_penguji3) {
+            return response()->json(['error' => 'Berita Acara belum ditandatangani digital oleh ketiga penguji.'], 400);
+        }
+
+        DB::beginTransaction();
+        try {
+            // Update status ujian
+            DB::table('akd_skripsi_ujian')
+                ->where('id', $id_skripsi_ujian)
+                ->update([
+                    'status' => $status,
+                    'updated_at' => now(),
+                ]);
+
+            // Update status skripsi induk
+            DB::table('akd_skripsi')
+                ->where('id', $ujian->id_skripsi)
+                ->update([
+                    'status' => $status,
+                    'updated_at' => now(),
+                ]);
+
+            // Sync ke akd_transkrip
+            $mhs = DB::table('akd_mahasiswa')->where('nim', $ujian->nim)->first();
+            if ($mhs) {
+                $mk = DB::table('akd_matakuliah')
+                    ->where('kode_program_studi', $mhs->kode_program_studi)
+                    ->where('tahun_kurikulum', $mhs->tahun_kurikulum)
+                    ->where(function($q) {
+                        $q->where('nama_matakuliah', 'like', '%skripsi%')
+                          ->orWhere('nama_matakuliah', 'like', '%tugas akhir%');
+                    })
+                    ->where('nama_matakuliah', 'not like', '%proposal%')
+                    ->first();
+
+                if ($mk) {
+                    $id_matakuliah = $mk->id_matakuliah;
+                    $tahun_kurikulum = $mk->tahun_kurikulum;
+
+                    $cek_nilai = DB::table('akd_transkrip')
+                        ->where('nim', $ujian->nim)
+                        ->where('id_matakuliah', $id_matakuliah)
+                        ->where('tahun_kurikulum', $tahun_kurikulum)
+                        ->first();
+
+                    if ($cek_nilai) {
+                        DB::table('akd_transkrip')
+                            ->where('id_transkrip', $cek_nilai->id_transkrip)
+                            ->update([
+                                'nilai' => $ba->nilai_huruf,
+                                'updated_at' => now()
+                            ]);
+                    } else {
+                        DB::table('akd_transkrip')->insert([
+                            'nim' => $ujian->nim,
+                            'id_matakuliah' => $id_matakuliah,
+                            'tahun_kurikulum' => $tahun_kurikulum,
+                            'nilai' => $ba->nilai_huruf,
+                            'created_at' => now(),
+                            'updated_at' => now()
+                        ]);
+                    }
+                }
+            }
+
+            DB::commit();
+            return response()->json(['success' => 'Persetujuan Penetapan Nilai berhasil disimpan. Nilai telah disinkronisasi ke transkrip mahasiswa.']);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => 'Gagal melakukan penetapan nilai: ' . $e->getMessage()], 500);
+        }
+    }
 }
+
 

@@ -454,4 +454,10 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::get("/dosen/skripsi/get-rubrik-cpmk", "SkripsiDosen@get_rubrik_cpmk")->name('skripsi_dosen_get_rubrik_cpmk');
     Route::get("/dosen/skripsi/get-nilai-ujian-cpmk", "SkripsiDosen@get_nilai_ujian_cpmk")->name('skripsi_dosen_get_nilai_ujian_cpmk');
     Route::post("/dosen/skripsi/simpan-nilai-ujian-cpmk", "SkripsiDosen@simpan_nilai_ujian_cpmk")->name('skripsi_dosen_simpan_nilai_ujian_cpmk');
+
+    // Berita Acara & Penetapan Ujian
+    Route::get("/dosen/skripsi/berita-acara/{id_skripsi_ujian}", "SkripsiDosen@get_berita_acara")->name('skripsi_dosen_get_berita_acara');
+    Route::post("/dosen/skripsi/setuju-berita-acara", "SkripsiDosen@setuju_berita_acara")->name('skripsi_dosen_setuju_berita_acara');
+    Route::get("/kaprodi/skripsi/penetapan-nilai", "SkripsiKaprodi@list_penetapan_nilai")->name('skripsi_kaprodi_list_penetapan_nilai');
+    Route::post("/kaprodi/skripsi/tetapkan-nilai", "SkripsiKaprodi@tetapkan_nilai")->name('skripsi_kaprodi_tetapkan_nilai');
 });

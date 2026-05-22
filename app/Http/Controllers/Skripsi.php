@@ -462,6 +462,11 @@ class Skripsi extends Controller
             DB::table('akd_skripsi_luaran')->insert($data);
         }
 
+        // Sinkronisasi target_luaran ke tabel utama akd_skripsi
+        DB::table('akd_skripsi')
+            ->where('id', $skripsi->id)
+            ->update(['target_luaran' => $request->jenis_luaran]);
+
         return response()->json(['success' => 'Data Realisasi Luaran Berhasil Disimpan']);
     }
 

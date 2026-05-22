@@ -656,4 +656,95 @@ class SkripsiKaprodi extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+
+    /**
+     * Get requirements config for a prodi
+     */
+    public function list_syarat_prodi($kode_prodi)
+    {
+        $data = DB::table('akd_skripsi_syarat_prodi as p')
+            ->join('akd_skripsi_syarat as s', 'p.kode_syarat', '=', 's.kode_syarat')
+            ->select('p.*', 's.nama_syarat', 's.jenis')
+            ->where('p.kode_prodi', $kode_prodi)
+            ->orderBy('p.fase', 'asc')
+            ->orderBy('p.urutan', 'asc')
+            ->get();
+
+        return response()->json($data);
+    }
+
+    /**
+     * Get all active master requirements
+     */
+    public function list_master_syarat()
+    {
+        $data = DB::table('akd_skripsi_syarat')
+            ->where('is_aktif', 1)
+            ->orderBy('nama_syarat', 'asc')
+            ->get();
+
+        return response()->json($data);
+    }
+
+    /**
+     * Save/Update a requirement mapping
+     */
+    public function save_syarat_prodi(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'kode_prodi' => 'required',
+            'kode_jenjang' => 'required|in:S1,D4,D3',
+            'fase' => 'required|in:sempro,ujian',
+            'kode_syarat' => 'required',
+            'operator' => 'required|in:>=,<=,=,EXISTS,-',
+            'nilai_target' => 'nullable',
+            'petugas_validasi' => 'required',
+            'tipe_upload' => 'required|in:file,url,bebas',
+            'keterangan' => 'nullable',
+            'urutan' => 'required|integer',
+            'is_wajib' => 'required|in:0,1',
+            'is_aktif' => 'required|in:0,1'
+        ]);
+
+        if ($v->fails()) {
+            return response()->json(['error' => $v->errors()->all()], 422);
+        }
+
+        $data = [
+            'kode_prodi' => $request->kode_prodi,
+            'kode_jenjang' => $request->kode_jenjang,
+            'fase' => $request->fase,
+            'kode_syarat' => $request->kode_syarat,
+            'operator' => $request->operator,
+            'nilai_target' => $request->nilai_target,
+            'petugas_validasi' => $request->petugas_validasi,
+            'tipe_upload' => $request->tipe_upload,
+            'keterangan' => $request->keterangan,
+            'urutan' => $request->urutan,
+            'is_wajib' => $request->is_wajib,
+            'is_aktif' => $request->is_aktif
+        ];
+
+        if ($request->has('id') && !empty($request->id)) {
+            DB::table('akd_skripsi_syarat_prodi')
+                ->where('id', $request->id)
+                ->update($data);
+            $msg = 'Syarat berhasil diperbarui.';
+        } else {
+            DB::table('akd_skripsi_syarat_prodi')->insert($data);
+            $msg = 'Syarat berhasil ditambahkan.';
+        }
+
+        return response()->json(['success' => $msg]);
+    }
+
+    /**
+     * Delete a requirement mapping
+     */
+    public function delete_syarat_prodi($id)
+    {
+        DB::table('akd_skripsi_syarat_prodi')->where('id', $id)->delete();
+        return response()->json(['success' => 'Syarat berhasil dihapus.']);
+    }
 }
+

@@ -435,6 +435,10 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::get("/kaprodi/skripsi/get-rubrik-cpmk/{kode_prodi}", "SkripsiKaprodi@get_rubrik_cpmk")->name('skripsi_kaprodi_get_rubrik_cpmk');
     Route::post("/kaprodi/skripsi/save-rubrik-cpmk", "SkripsiKaprodi@save_rubrik_cpmk")->name('skripsi_kaprodi_save_rubrik_cpmk');
     Route::get("/kaprodi/skripsi/search-matakuliah", "SkripsiKaprodi@search_matakuliah")->name('skripsi_kaprodi_search_matakuliah');
+    Route::get("/kaprodi/skripsi/syarat-prodi/{kode_prodi}", "SkripsiKaprodi@list_syarat_prodi")->name('skripsi_kaprodi_list_syarat');
+    Route::get("/kaprodi/skripsi/master-syarat", "SkripsiKaprodi@list_master_syarat")->name('skripsi_kaprodi_master_syarat');
+    Route::post("/kaprodi/skripsi/save-syarat-prodi", "SkripsiKaprodi@save_syarat_prodi")->name('skripsi_kaprodi_save_syarat');
+    Route::delete("/kaprodi/skripsi/delete-syarat-prodi/{id}", "SkripsiKaprodi@delete_syarat_prodi")->name('skripsi_kaprodi_delete_syarat');
     Route::get("/akademik/skripsi/list-config-sempro", "SkripsiKaprodi@list_config_sempro")->name('skripsi_admin_list_config_sempro');
     Route::post("/akademik/skripsi/validate-config-sempro", "SkripsiKaprodi@validate_config_sempro")->name('skripsi_admin_validate_config_sempro');
 

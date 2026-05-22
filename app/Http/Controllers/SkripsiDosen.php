@@ -180,6 +180,7 @@ class SkripsiDosen extends Controller
                 's.judul',
                 's.target_luaran',
                 DB::raw("CASE WHEN s.target_luaran IS NOT NULL AND s.target_luaran != 'buku_skripsi' THEN 1 ELSE 0 END as is_obe"),
+                'm.kode_program_studi as kode_prodi',
                 'p.nama_program_studi',
                 'u.tanggal_ujian as tgl_ujian',
                 'u.jam_mulai as jam_ujian',

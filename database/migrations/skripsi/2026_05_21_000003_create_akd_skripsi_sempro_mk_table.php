@@ -13,12 +13,14 @@ class CreateAkdSkripsiSemproMkTable extends Migration
      */
     public function up()
     {
-        Schema::create('akd_skripsi_sempro_mk', function (Blueprint $table) {
-            $table->integer('id', true);
-            $table->string('kode_prodi', 20)->nullable()->index();
-            $table->integer('id_matakuliah')->nullable();
-            $table->timestamps();
-        });
+        if (!Schema::hasTable('akd_skripsi_sempro_mk')) {
+            Schema::create('akd_skripsi_sempro_mk', function (Blueprint $table) {
+                $table->integer('id', true);
+                $table->string('kode_prodi', 20)->nullable()->index();
+                $table->integer('id_matakuliah')->nullable();
+                $table->timestamps();
+            });
+        }
     }
 
     /**

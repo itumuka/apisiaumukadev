@@ -64,17 +64,6 @@ class RefineSkripsiSchemaFinal extends Migration
                 $table->timestamp('updated_at')->nullable()->useCurrent()->useCurrentOnUpdate();
             });
         }
-
-        // 5. Memastikan tabel tmp_verifikasi_nilai ada
-        if (!Schema::hasTable('tmp_verifikasi_nilai')) {
-            Schema::create('tmp_verifikasi_nilai', function (Blueprint $table) {
-                $table->string('nim', 20)->nullable();
-                $table->integer('id_matakuliah')->nullable();
-                $table->string('nama_matakuliah', 255)->nullable();
-                $table->string('nilai_sumber', 5)->nullable();
-                $table->index(['nim', 'id_matakuliah'], 'idx_nim_matkul');
-            });
-        }
     }
 
     public function down()

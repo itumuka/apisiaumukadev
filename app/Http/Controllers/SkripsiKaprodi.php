@@ -658,6 +658,37 @@ class SkripsiKaprodi extends Controller
     }
 
     /**
+     * Reset/Delete CPMK Rubrics for Kaprodi
+     */
+    public function reset_rubrik_cpmk(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'kode_prodi' => 'required',
+        ]);
+
+        if ($v->fails()) return response()->json(['error' => $v->errors()->all()], 422);
+
+        $kode_prodi = $request->kode_prodi;
+
+        DB::beginTransaction();
+        try {
+            $old_rubrics = DB::table('akd_skripsi_rubrik_cpmk')->where('kode_prodi', $kode_prodi)->get();
+            $old_ids = $old_rubrics->pluck('id')->toArray();
+            
+            if (!empty($old_ids)) {
+                DB::table('akd_skripsi_cpmk_cpl')->whereIn('id_cpmk', $old_ids)->delete();
+            }
+            DB::table('akd_skripsi_rubrik_cpmk')->where('kode_prodi', $kode_prodi)->delete();
+
+            DB::commit();
+            return response()->json(['success' => 'Rubrik CPMK berhasil direset ke default']);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
      * Get requirements config for a prodi
      */
     public function list_syarat_prodi($kode_prodi)

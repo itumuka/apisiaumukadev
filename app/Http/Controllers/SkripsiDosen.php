@@ -177,6 +177,7 @@ class SkripsiDosen extends Controller
                 'u.id_skripsi',
                 'u.nim',
                 'm.nama_mahasiswa',
+                'm.kode_penilaian',
                 's.judul',
                 's.target_luaran',
                 DB::raw("CASE WHEN s.target_luaran IS NOT NULL AND s.target_luaran != 'buku_skripsi' THEN 1 ELSE 0 END as is_obe"),
@@ -206,7 +207,8 @@ class SkripsiDosen extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data' => $rows
+            'data' => $rows,
+            'grade_rules' => config('grades.rules')
         ]);
     }
 
@@ -335,16 +337,18 @@ class SkripsiDosen extends Controller
         if (count($examiner_scores) > 0) {
             $final_numeric_score = array_sum($examiner_scores) / count($examiner_scores);
 
-            // Pemetaan predikat huruf
+            // Pemetaan predikat huruf dari konfigurasi berdasarkan kode_penilaian mahasiswa
+            $mhs_penilaian = DB::table('akd_mahasiswa')->where('nim', $ujian->nim)->first();
+            $kode_penilaian = $mhs_penilaian ? (int)$mhs_penilaian->kode_penilaian : 1;
+            $rules = config('grades.rules.' . $kode_penilaian, config('grades.rules.1'));
+
             $letter = 'E';
-            if ($final_numeric_score >= 85) $letter = 'A';
-            elseif ($final_numeric_score >= 80) $letter = 'A-';
-            elseif ($final_numeric_score >= 75) $letter = 'B+';
-            elseif ($final_numeric_score >= 70) $letter = 'B';
-            elseif ($final_numeric_score >= 65) $letter = 'B-';
-            elseif ($final_numeric_score >= 60) $letter = 'C+';
-            elseif ($final_numeric_score >= 55) $letter = 'C';
-            elseif ($final_numeric_score >= 50) $letter = 'D';
+            foreach ($rules as $rule) {
+                if ($final_numeric_score >= $rule['min']) {
+                    $letter = $rule['grade'];
+                    break;
+                }
+            }
 
             // Jika seluruh tim penilai/verifikator sudah memberi nilai, ubah status kelulusan
             $status = $ujian->status;

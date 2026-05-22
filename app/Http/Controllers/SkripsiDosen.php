@@ -217,17 +217,20 @@ class SkripsiDosen extends Controller
     {
         $kode_prodi = $request->kode_prodi;
         
-        $query = DB::table('akd_skripsi_rubrik_cpmk');
+        $rows = collect();
         if ($kode_prodi) {
-            $query->where(function($q) use ($kode_prodi) {
-                $q->where('kode_prodi', $kode_prodi)
-                  ->orWhereNull('kode_prodi');
-            });
-        } else {
-            $query->whereNull('kode_prodi');
+            $rows = DB::table('akd_skripsi_rubrik_cpmk')
+                ->where('kode_prodi', $kode_prodi)
+                ->orderBy('kode_cpmk', 'asc')
+                ->get();
         }
-
-        $rows = $query->orderBy('kode_cpmk', 'asc')->get();
+        
+        if ($rows->isEmpty()) {
+            $rows = DB::table('akd_skripsi_rubrik_cpmk')
+                ->whereNull('kode_prodi')
+                ->orderBy('kode_cpmk', 'asc')
+                ->get();
+        }
 
         return response()->json([
             'status' => 'success',

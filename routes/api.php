@@ -161,6 +161,7 @@ Route::middleware(['jwtverifie'])->group(function () {
 
     Route::get("/akademik/home-kalenderakademik", "Akademik@home_kalenderakademik")->name('home_kalenderakademik');
     Route::get("/akademik/home-kalenderakademikbase", "Akademik@home_kalenderakademikbase")->name('home_kalenderakademikbase');
+    Route::get("/akademik/dashboard-stats", "Akademik@dashboard_stats")->name('dashboard_stats');
     Route::get("/akademik/change-session-tahunakademik", "Akademik@change_session_tahunakademik")->name('change_session_tahunakademik');
     Route::get("/akademik/select-tahunakademik", "Akademik@select_tahunakademik")->name('select_tahunakademik');
     Route::get("/akademik/tahunajaran", "Akademik@tahunajaran")->name('aktahunajaran');

@@ -702,6 +702,55 @@ class Akademik extends Controller
         $home_kalenderakademik = $this->akademik->home_kalenderakademikbase($request);
         return $home_kalenderakademik;
     }
+    public function dashboard_stats(Request $request)
+    {
+        $total_mahasiswa = DB::table('akd_mahasiswa')->where('trash', 0)->count();
+        $total_dosen = DB::table('akd_penawaran_matakuliah')->distinct('kode_dosen')->count('kode_dosen');
+        if ($total_dosen == 0) {
+            $total_dosen = DB::table('akd_dosen')->count();
+        }
+        $total_prodi = DB::table('akd_program_studi')->count();
+        $total_matakuliah = DB::table('akd_matakuliah')->count();
+
+        $sebaran = DB::table('akd_mahasiswa')
+            ->join('akd_program_studi', 'akd_mahasiswa.kode_program_studi', '=', 'akd_program_studi.kode_program_studi')
+            ->select('akd_program_studi.nama_program_studi', DB::raw('count(akd_mahasiswa.id_mhs) as total'))
+            ->where('akd_mahasiswa.trash', 0)
+            ->groupBy('akd_program_studi.nama_program_studi')
+            ->orderBy('total', 'desc')
+            ->get();
+
+        $tahun = $request->input('tahun');
+        $semester = $request->input('semester');
+
+        $aktif_registrasi = 0;
+        if ($tahun && $semester) {
+            $aktif_registrasi = DB::table('akd_heregistrasi')
+                ->where('tahun', $tahun)
+                ->where('semester', $semester)
+                ->count();
+        } else {
+            $latest_ta = DB::table('akd_mreg')->orderBy('tahun', 'desc')->orderBy('semester', 'desc')->first();
+            if ($latest_ta) {
+                $aktif_registrasi = DB::table('akd_heregistrasi')
+                    ->where('tahun', $latest_ta->tahun)
+                    ->where('semester', $latest_ta->semester)
+                    ->count();
+            }
+        }
+
+        $belum_registrasi = max(0, $total_mahasiswa - $aktif_registrasi);
+
+        return response()->json([
+            'total_mahasiswa' => $total_mahasiswa,
+            'total_dosen' => $total_dosen,
+            'total_prodi' => $total_prodi,
+            'total_matakuliah' => $total_matakuliah,
+            'sebaran_mahasiswa' => $sebaran,
+            'aktif_registrasi' => $aktif_registrasi,
+            'belum_registrasi' => $belum_registrasi
+        ], 200);
+    }
 
     public function change_session_tahunakademik(Request $request)
     {

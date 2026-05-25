@@ -172,6 +172,7 @@ class SkripsiDosen extends Controller
             ->leftJoin('simpeg_pegawai as peg1', 'u.id_penguji1', '=', 'peg1.id')
             ->leftJoin('simpeg_pegawai as peg2', 'u.id_penguji2', '=', 'peg2.id')
             ->leftJoin('simpeg_pegawai as peg3', 'u.id_penguji3', '=', 'peg3.id')
+            ->leftJoin('akd_skripsi_luaran as l', 's.id', '=', 'l.id_skripsi')
             ->select(
                 'u.id as id_skripsi_ujian',
                 'u.id_skripsi',
@@ -194,7 +195,9 @@ class SkripsiDosen extends Controller
                 'u.id_penguji3',
                 DB::raw("CONCAT_WS(' ', peg1.gelar_depan, peg1.nama, peg1.gelar_belakang) as nama_penguji1"),
                 DB::raw("CONCAT_WS(' ', peg2.gelar_depan, peg2.nama, peg2.gelar_belakang) as nama_penguji2"),
-                DB::raw("CONCAT_WS(' ', peg3.gelar_depan, peg3.nama, peg3.gelar_belakang) as nama_penguji3")
+                DB::raw("CONCAT_WS(' ', peg3.gelar_depan, peg3.nama, peg3.gelar_belakang) as nama_penguji3"),
+                'l.url_link',
+                'l.jenis_luaran'
             )
             ->where(function ($query) use ($id_dosen) {
                 $query->where('u.id_penguji1', $id_dosen)

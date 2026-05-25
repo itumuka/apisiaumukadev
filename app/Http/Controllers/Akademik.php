@@ -1337,6 +1337,8 @@ class Akademik extends Controller
             'eta_sks_minimal' => $request->eta_sks_minimal === '' ? null : $request->eta_sks_minimal,
             'eta_ada_sempro' => $etaSempro,
             'eta_komponen_bayar' => $request->eta_komponen_bayar === '' ? null : $request->eta_komponen_bayar,
+            'eta_komponen_bayar_ujian' => $request->eta_komponen_bayar_ujian === '' ? null : $request->eta_komponen_bayar_ujian,
+            'eta_is_obe' => $request->eta_is_obe === '' ? null : $request->eta_is_obe,
             'eta_minimal_bimbingan' => $minBimbingan === '' ? null : $minBimbingan,
         ]);
         
@@ -1349,7 +1351,9 @@ class Akademik extends Controller
             'enama_program_studi' => 'required',
             'eta_sks_minimal' => 'nullable|integer|min:0',
             'eta_ada_sempro' => 'nullable|integer|in:0,1',
+            'eta_is_obe' => 'nullable|integer|in:0,1',
             'eta_komponen_bayar' => 'nullable|string',
+            'eta_komponen_bayar_ujian' => 'nullable|string',
             'eta_minimal_bimbingan' => 'nullable|integer|min:0'
         ]);
 

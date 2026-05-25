@@ -1739,6 +1739,14 @@ TIME_FORMAT(jam_mulai, '%H:%i') AS jam_mulai, TIME_FORMAT(jam_selesai, '%H:%i') 
         if (in_array('ta_komponen_bayar', $existingColumns) && $request->has('eta_komponen_bayar') && $request->eta_komponen_bayar !== null) {
             $updateData['ta_komponen_bayar'] = $request->eta_komponen_bayar;
         }
+
+        if (in_array('ta_komponen_bayar_ujian', $existingColumns) && $request->has('eta_komponen_bayar_ujian') && $request->eta_komponen_bayar_ujian !== null) {
+            $updateData['ta_komponen_bayar_ujian'] = $request->eta_komponen_bayar_ujian;
+        }
+
+        if (in_array('ta_is_obe', $existingColumns) && $request->has('eta_is_obe') && $request->eta_is_obe !== null) {
+            $updateData['ta_is_obe'] = $request->eta_is_obe;
+        }
         
         if ($request->has('eta_minimal_bimbingan') && $request->eta_minimal_bimbingan !== null) {
             if (in_array('ta_minimal_bimbingan', $existingColumns)) {

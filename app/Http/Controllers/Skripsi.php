@@ -88,6 +88,30 @@ class Skripsi extends Controller
         $skripsi = DB::table('akd_skripsi')->where('nim', $nim)->first();
         $hasil['judul_proposal'] = $skripsi ? $skripsi->judul : '';
 
+        // Add ta_is_obe and ujian_skripsi_lunas fields dynamically
+        $mhs = DB::table('akd_mahasiswa')->where('nim', $nim)->first();
+        $is_obe = 1;
+        $bayar_ujian = true;
+        if ($mhs) {
+            $prodiConfig = DB::table('akd_program_studi')
+                ->where('kode_program_studi', $mhs->kode_program_studi)
+                ->select('ta_komponen_bayar_ujian', 'ta_is_obe')
+                ->first();
+            if ($prodiConfig) {
+                $is_obe = isset($prodiConfig->ta_is_obe) ? $prodiConfig->ta_is_obe : 1;
+                $nama_biaya = $prodiConfig->ta_komponen_bayar_ujian ?: 'Ujian Skripsi';
+                if ($fase == 'ujian') {
+                    $bayar_ujian = DB::table('keu_tagihan')
+                        ->where('nim', $nim)
+                        ->where('nama_biaya', 'like', '%' . $nama_biaya . '%')
+                        ->where('status', '1')
+                        ->count() > 0;
+                }
+            }
+        }
+        $hasil['ta_is_obe'] = $is_obe;
+        $hasil['ujian_skripsi_lunas'] = $bayar_ujian;
+
         return response()->json([
             'status' => 'success',
             'data' => $hasil

@@ -987,6 +987,18 @@ class Akademik extends Controller
 
     public function data_makulpenawaran(Request $request)
     {
+        $username = $request->header('username');
+        if ($username) {
+            $dos = DB::connection('mysql')->table('user_dosen')
+                ->join('simpeg_pegawai', 'user_dosen.id_pegawai', '=', 'simpeg_pegawai.id')
+                ->join('akd_program_studi', 'simpeg_pegawai.kode_prodi', '=', 'akd_program_studi.kode_program_studi')
+                ->where('user_dosen.email_login', $username)
+                ->select('akd_program_studi.nama_program_studi')
+                ->first();
+            if ($dos) {
+                $request->merge(['nama_program_studi' => $dos->nama_program_studi]);
+            }
+        }
         $makulpenawaran = $this->akademik->data_makulpenawaran($request);
         return $makulpenawaran;
     }
@@ -1440,6 +1452,16 @@ class Akademik extends Controller
     }
     public function select_kurikulum(Request $request)
     {
+        $username = $request->header('username');
+        if ($username) {
+            $dos = DB::connection('mysql')->table('user_dosen')
+                ->join('simpeg_pegawai', 'user_dosen.id_pegawai', '=', 'simpeg_pegawai.id')
+                ->where('user_dosen.email_login', $username)
+                ->first();
+            if ($dos) {
+                $request->merge(['kode_prodi' => $dos->kode_prodi]);
+            }
+        }
         $select2_kurikulum = $this->akademik->select_kurikulum($request);
         return $select2_kurikulum;
     }
@@ -1589,12 +1611,22 @@ class Akademik extends Controller
             ]);
         return $ubahstatuskalenderakademik;
     }
-    // Mata Kuliah
-    public function matakuliah()
+    public function matakuliah(Request $request)
     {
-        $datamatakuliah = $this->akademik->matakuliah();
+        $username = $request->header('username');
+        if ($username) {
+            $dos = DB::connection('mysql')->table('user_dosen')
+                ->join('simpeg_pegawai', 'user_dosen.id_pegawai', '=', 'simpeg_pegawai.id')
+                ->where('user_dosen.email_login', $username)
+                ->first();
+            if ($dos) {
+                $request->merge(['kode_prodi' => $dos->kode_prodi]);
+            }
+        }
+        $datamatakuliah = $this->akademik->matakuliah($request);
         return $datamatakuliah;
     }
+
 
     public function simpan_matakuliah(Request $request)
     {

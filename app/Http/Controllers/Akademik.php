@@ -995,7 +995,7 @@ class Akademik extends Controller
                 ->where('user_dosen.email_login', $username)
                 ->select('akd_program_studi.nama_program_studi')
                 ->first();
-            if ($dos) {
+            if ($dos && $request->tipe !== 'Dosen') {
                 $request->merge(['nama_program_studi' => $dos->nama_program_studi]);
             }
         }

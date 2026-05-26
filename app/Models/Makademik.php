@@ -1932,11 +1932,27 @@ TIME_FORMAT(jam_mulai, '%H:%i') AS jam_mulai, TIME_FORMAT(jam_selesai, '%H:%i') 
         return $ubahstatuskalenderakademik;
     }
     // Mata Kuliah
-    public function matakuliah()
+    public function matakuliah(Request $request = null)
     {
-        $matakuliah = DB::select("SELECT *,a.kode_program_studi AS kode_prodi FROM akd_matakuliah a JOIN akd_program_studi b ON a.kode_program_studi=b.kode_program_studi ORDER BY a.id_matakuliah DESC");
+        $query = "SELECT *, a.kode_program_studi AS kode_prodi FROM akd_matakuliah a JOIN akd_program_studi b ON a.kode_program_studi=b.kode_program_studi";
+        $conditions = [];
+        if ($request) {
+            if ($request->has('kode_prodi') && !empty($request->kode_prodi)) {
+                $conditions[] = "a.kode_program_studi = '" . $request->kode_prodi . "'";
+            }
+            if ($request->has('tahun_kurikulum') && !empty($request->tahun_kurikulum)) {
+                $conditions[] = "a.tahun_kurikulum = '" . $request->tahun_kurikulum . "'";
+            }
+        }
+        if (count($conditions) > 0) {
+            $query .= " WHERE " . implode(" AND ", $conditions);
+        }
+        $query .= " ORDER BY a.id_matakuliah DESC";
+
+        $matakuliah = DB::select($query);
         return $matakuliah;
     }
+
 
     public function simpan_matakuliah(Request $request)
     {

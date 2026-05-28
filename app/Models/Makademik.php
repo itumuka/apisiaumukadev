@@ -1739,6 +1739,14 @@ TIME_FORMAT(jam_mulai, '%H:%i') AS jam_mulai, TIME_FORMAT(jam_selesai, '%H:%i') 
         if (in_array('ta_komponen_bayar', $existingColumns) && $request->has('eta_komponen_bayar') && $request->eta_komponen_bayar !== null) {
             $updateData['ta_komponen_bayar'] = $request->eta_komponen_bayar;
         }
+
+        if (in_array('ta_komponen_bayar_ujian', $existingColumns) && $request->has('eta_komponen_bayar_ujian') && $request->eta_komponen_bayar_ujian !== null) {
+            $updateData['ta_komponen_bayar_ujian'] = $request->eta_komponen_bayar_ujian;
+        }
+
+        if (in_array('ta_is_obe', $existingColumns) && $request->has('eta_is_obe') && $request->eta_is_obe !== null) {
+            $updateData['ta_is_obe'] = $request->eta_is_obe;
+        }
         
         if ($request->has('eta_minimal_bimbingan') && $request->eta_minimal_bimbingan !== null) {
             if (in_array('ta_minimal_bimbingan', $existingColumns)) {
@@ -1924,11 +1932,27 @@ TIME_FORMAT(jam_mulai, '%H:%i') AS jam_mulai, TIME_FORMAT(jam_selesai, '%H:%i') 
         return $ubahstatuskalenderakademik;
     }
     // Mata Kuliah
-    public function matakuliah()
+    public function matakuliah(Request $request = null)
     {
-        $matakuliah = DB::select("SELECT *,a.kode_program_studi AS kode_prodi FROM akd_matakuliah a JOIN akd_program_studi b ON a.kode_program_studi=b.kode_program_studi ORDER BY a.id_matakuliah DESC");
+        $query = "SELECT *, a.kode_program_studi AS kode_prodi FROM akd_matakuliah a JOIN akd_program_studi b ON a.kode_program_studi=b.kode_program_studi";
+        $conditions = [];
+        if ($request) {
+            if ($request->has('kode_prodi') && !empty($request->kode_prodi)) {
+                $conditions[] = "a.kode_program_studi = '" . $request->kode_prodi . "'";
+            }
+            if ($request->has('tahun_kurikulum') && !empty($request->tahun_kurikulum)) {
+                $conditions[] = "a.tahun_kurikulum = '" . $request->tahun_kurikulum . "'";
+            }
+        }
+        if (count($conditions) > 0) {
+            $query .= " WHERE " . implode(" AND ", $conditions);
+        }
+        $query .= " ORDER BY a.id_matakuliah DESC";
+
+        $matakuliah = DB::select($query);
         return $matakuliah;
     }
+
 
     public function simpan_matakuliah(Request $request)
     {

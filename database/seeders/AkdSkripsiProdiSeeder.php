@@ -27,7 +27,8 @@ class AkdSkripsiProdiSeeder extends Seeder
                     'ta_minimal_bimbingan' => 6,
                     'ta_komponen_bayar' => 'Tugas Akhir',
                     'ta_komponen_bayar_ujian' => 'Tugas Akhir',
-                    'ta_nama_tugas_akhir' => 'Tugas Akhir'
+                    'ta_nama_tugas_akhir' => 'Tugas Akhir',
+                    'ta_is_obe' => 0
                 ]);
             } else {
                 // S1 / D4 / Others
@@ -37,7 +38,8 @@ class AkdSkripsiProdiSeeder extends Seeder
                     'ta_minimal_bimbingan' => 8,
                     'ta_komponen_bayar' => 'Bimbingan Skripsi',
                     'ta_komponen_bayar_ujian' => 'Ujian Skripsi',
-                    'ta_nama_tugas_akhir' => 'Skripsi'
+                    'ta_nama_tugas_akhir' => 'Skripsi',
+                    'ta_is_obe' => 1
                 ]);
             }
         }

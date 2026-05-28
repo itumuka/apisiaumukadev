@@ -156,4 +156,389 @@ class SkripsiDosen extends Controller
             'success' => "Persetujuan {$request->fase} berhasil disimpan."
         ]);
     }
-}
+
+    /**
+     * List Mahasiswa yang diuji oleh Dosen (sebagai Penguji/Verifikator)
+     */
+    public function list_mahasiswa_diuji(Request $request)
+    {
+        $id_dosen = $request->id_dosen;
+        if (!$id_dosen) return response()->json(['error' => 'ID Dosen diperlukan'], 400);
+
+        $rows = DB::table('akd_skripsi_ujian as u')
+            ->join('akd_skripsi as s', 'u.id_skripsi', '=', 's.id')
+            ->join('akd_mahasiswa as m', 'u.nim', '=', 'm.nim')
+            ->join('akd_program_studi as p', 'm.kode_program_studi', '=', 'p.kode_program_studi')
+            ->leftJoin('simpeg_pegawai as peg1', 'u.id_penguji1', '=', 'peg1.id')
+            ->leftJoin('simpeg_pegawai as peg2', 'u.id_penguji2', '=', 'peg2.id')
+            ->leftJoin('simpeg_pegawai as peg3', 'u.id_penguji3', '=', 'peg3.id')
+            ->leftJoin('akd_skripsi_luaran as l', 's.id', '=', 'l.id_skripsi')
+            ->select(
+                'u.id as id_skripsi_ujian',
+                'u.id_skripsi',
+                'u.nim',
+                'm.nama_mahasiswa',
+                'm.kode_penilaian',
+                's.judul',
+                's.target_luaran',
+                DB::raw("CASE WHEN s.target_luaran IS NOT NULL AND s.target_luaran != 'buku_skripsi' THEN 1 ELSE 0 END as is_obe"),
+                'm.kode_program_studi as kode_prodi',
+                'p.nama_program_studi',
+                'u.tanggal_ujian as tgl_ujian',
+                'u.jam_mulai as jam_ujian',
+                'u.ruang as ruang_ujian',
+                'u.status as status_ujian',
+                'u.nilai_ujian',
+                'u.nilai_angka',
+                'u.id_penguji1',
+                'u.id_penguji2',
+                'u.id_penguji3',
+                DB::raw("CONCAT_WS(' ', peg1.gelar_depan, peg1.nama, peg1.gelar_belakang) as nama_penguji1"),
+                DB::raw("CONCAT_WS(' ', peg2.gelar_depan, peg2.nama, peg2.gelar_belakang) as nama_penguji2"),
+                DB::raw("CONCAT_WS(' ', peg3.gelar_depan, peg3.nama, peg3.gelar_belakang) as nama_penguji3"),
+                'l.url_link',
+                'l.jenis_luaran'
+            )
+            ->where(function ($query) use ($id_dosen) {
+                $query->where('u.id_penguji1', $id_dosen)
+                      ->orWhere('u.id_penguji2', $id_dosen)
+                      ->orWhere('u.id_penguji3', $id_dosen);
+            })
+            ->whereNotNull('u.tanggal_ujian')
+            ->orderBy('u.tanggal_ujian', 'desc')
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $rows,
+            'grade_rules' => config('grades.rules')
+        ]);
+    }
+
+    /**
+     * Ambil Rubrik CPMK untuk Penilaian OBE
+     */
+    public function get_rubrik_cpmk(Request $request)
+    {
+        $kode_prodi = $request->kode_prodi;
+        
+        $rows = collect();
+        if ($kode_prodi) {
+            $rows = DB::table('akd_skripsi_rubrik_cpmk')
+                ->where('kode_prodi', $kode_prodi)
+                ->orderBy('kode_cpmk', 'asc')
+                ->get();
+        }
+        
+        if ($rows->isEmpty()) {
+            $rows = DB::table('akd_skripsi_rubrik_cpmk')
+                ->whereNull('kode_prodi')
+                ->orderBy('kode_cpmk', 'asc')
+                ->get();
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $rows
+        ]);
+    }
+
+    /**
+     * Ambil Nilai Ujian CPMK yang sudah di-input oleh Dosen
+     */
+    public function get_nilai_ujian_cpmk(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'id_skripsi_ujian' => 'required',
+            'id_dosen' => 'required'
+        ]);
+
+        if ($v->fails()) return response()->json(['error' => $v->errors()->all()], 422);
+
+        $rows = DB::table('akd_skripsi_nilai_cpmk')
+            ->where('id_skripsi_ujian', $request->id_skripsi_ujian)
+            ->where('id_dosen', $request->id_dosen)
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $rows
+        ]);
+    }
+
+    /**
+     * Simpan Nilai Ujian Per CPMK
+     */
+    public function simpan_nilai_ujian_cpmk(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'id_skripsi_ujian' => 'required',
+            'id_dosen' => 'required',
+            'nilai' => 'required|array', // key is id_cpmk, value is score 0-100
+        ]);
+
+        if ($v->fails()) return response()->json(['error' => $v->errors()->all()], 422);
+
+        $id_skripsi_ujian = $request->id_skripsi_ujian;
+        $id_dosen = $request->id_dosen;
+
+        // Simpan nilai per CPMK
+        foreach ($request->nilai as $id_cpmk => $score) {
+            DB::table('akd_skripsi_nilai_cpmk')->updateOrInsert(
+                ['id_skripsi_ujian' => $id_skripsi_ujian, 'id_dosen' => $id_dosen, 'id_cpmk' => $id_cpmk],
+                ['nilai' => $score, 'updated_at' => now(), 'created_at' => now()]
+            );
+        }
+
+        // Kalkulasi ulang nilai akhir ujian
+        $ujian = DB::table('akd_skripsi_ujian')->where('id', $id_skripsi_ujian)->first();
+        if (!$ujian) return response()->json(['error' => 'Data ujian tidak ditemukan.'], 404);
+
+        $examiners = array_filter([$ujian->id_penguji1, $ujian->id_penguji2, $ujian->id_penguji3]);
+        
+        $mhs = DB::table('akd_mahasiswa')->where('nim', $ujian->nim)->first();
+        $kode_prodi = $mhs ? $mhs->kode_program_studi : null;
+
+        $rubrics_list = collect();
+        if ($kode_prodi) {
+            $rubrics_list = DB::table('akd_skripsi_rubrik_cpmk')
+                ->where('kode_prodi', $kode_prodi)
+                ->get();
+        }
+
+        if ($rubrics_list->isEmpty()) {
+            $rubrics_list = DB::table('akd_skripsi_rubrik_cpmk')
+                ->whereNull('kode_prodi')
+                ->get();
+        }
+
+        $rubrics = $rubrics_list->keyBy('id');
+
+        $examiner_scores = [];
+        foreach ($examiners as $ex_id) {
+            $scores = DB::table('akd_skripsi_nilai_cpmk')
+                ->where('id_skripsi_ujian', $id_skripsi_ujian)
+                ->where('id_dosen', $ex_id)
+                ->get();
+
+            if ($scores->count() > 0) {
+                $weighted_sum = 0;
+                $ex_weight = 0;
+                foreach ($scores as $s) {
+                    if (isset($rubrics[$s->id_cpmk])) {
+                        $w = $rubrics[$s->id_cpmk]->bobot;
+                        $weighted_sum += $s->nilai * $w;
+                        $ex_weight += $w;
+                    }
+                }
+                if ($ex_weight > 0) {
+                    $examiner_scores[] = $weighted_sum / $ex_weight;
+                }
+            }
+        }
+
+        if (count($examiner_scores) > 0) {
+            $final_numeric_score = array_sum($examiner_scores) / count($examiner_scores);
+
+            // Pemetaan predikat huruf dari konfigurasi berdasarkan kode_penilaian mahasiswa
+            $mhs_penilaian = DB::table('akd_mahasiswa')->where('nim', $ujian->nim)->first();
+            $kode_penilaian = $mhs_penilaian ? (int)$mhs_penilaian->kode_penilaian : 1;
+            $rules = config('grades.rules.' . $kode_penilaian, config('grades.rules.1'));
+
+            $letter = 'E';
+            foreach ($rules as $rule) {
+                if ($final_numeric_score >= $rule['min']) {
+                    $letter = $rule['grade'];
+                    break;
+                }
+            }
+
+            // Jika seluruh tim penilai/verifikator sudah memberi nilai, buat Berita Acara
+            $status = $ujian->status;
+            if (count($examiner_scores) == count($examiners)) {
+                // Semua penguji sudah input → tunggu penetapan formal (Berita Acara)
+                if (!in_array($ujian->status, ['menunggu_penetapan', 'ditetapkan', 'lulus', 'tidak_lulus'])) {
+                    $status = 'menunggu_penetapan';
+                }
+
+                // Buat atau update record Berita Acara
+                $existing_ba = DB::table('akd_skripsi_berita_acara')
+                    ->where('id_skripsi_ujian', $id_skripsi_ujian)
+                    ->first();
+
+                if (!$existing_ba) {
+                    DB::table('akd_skripsi_berita_acara')->insert([
+                        'id_skripsi_ujian' => $id_skripsi_ujian,
+                        'nim'              => $ujian->nim,
+                        'nilai_angka'      => $final_numeric_score,
+                        'nilai_huruf'      => $letter,
+                        'id_penguji1'      => $ujian->id_penguji1,
+                        'id_penguji2'      => $ujian->id_penguji2,
+                        'id_penguji3'      => $ujian->id_penguji3,
+                        'status'           => 'menunggu_ttd',
+                        'created_at'       => now(),
+                        'updated_at'       => now(),
+                    ]);
+                } else {
+                    // Update nilai terbaru jika sudah ada
+                    DB::table('akd_skripsi_berita_acara')
+                        ->where('id_skripsi_ujian', $id_skripsi_ujian)
+                        ->update([
+                            'nilai_angka' => $final_numeric_score,
+                            'nilai_huruf' => $letter,
+                            'updated_at'  => now(),
+                        ]);
+                }
+            } elseif (count($examiner_scores) > 0) {
+                // Sebagian penguji sudah input nilai → status intermediat "dinilai"
+                if (!in_array($ujian->status, ['menunggu_penetapan', 'ditetapkan', 'lulus', 'tidak_lulus'])) {
+                    $status = 'dinilai';
+                }
+            }
+
+            DB::table('akd_skripsi_ujian')
+                ->where('id', $id_skripsi_ujian)
+                ->update([
+                    'nilai_ujian' => $letter,
+                    'nilai_angka' => $final_numeric_score,
+                    'status'      => $status,
+                    'updated_at'  => now()
+                ]);
+
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Nilai Ujian/Luaran berhasil disimpan.'
+        ]);
+    }
+
+    /**
+     * Ambil detail Berita Acara Penetapan untuk satu ujian
+     */
+    public function get_berita_acara(Request $request, $id_skripsi_ujian = null)
+    {
+        $id_skripsi_ujian = $id_skripsi_ujian ?? $request->id_skripsi_ujian;
+        if ($id_skripsi_ujian) {
+            $request->merge(['id_skripsi_ujian' => $id_skripsi_ujian]);
+        }
+
+        $v = Validator::make($request->all(), [
+            'id_skripsi_ujian' => 'required',
+            'id_dosen'         => 'nullable',
+        ]);
+        if ($v->fails()) return response()->json(['error' => $v->errors()->all()], 422);
+
+        $id_dosen = $request->id_dosen;
+
+        $ujian = DB::table('akd_skripsi_ujian as u')
+            ->join('akd_skripsi as s', 'u.id_skripsi', '=', 's.id')
+            ->join('akd_mahasiswa as m', 'u.nim', '=', 'm.nim')
+            ->leftJoin('simpeg_pegawai as p1', 'u.id_penguji1', '=', 'p1.id')
+            ->leftJoin('simpeg_pegawai as p2', 'u.id_penguji2', '=', 'p2.id')
+            ->leftJoin('simpeg_pegawai as p3', 'u.id_penguji3', '=', 'p3.id')
+            ->select(
+                'u.*', 's.judul', 'm.nama_mahasiswa',
+                DB::raw("CONCAT_WS(' ', p1.gelar_depan, p1.nama, p1.gelar_belakang) as nama_penguji1"),
+                DB::raw("CONCAT_WS(' ', p2.gelar_depan, p2.nama, p2.gelar_belakang) as nama_penguji2"),
+                DB::raw("CONCAT_WS(' ', p3.gelar_depan, p3.nama, p3.gelar_belakang) as nama_penguji3")
+            )
+            ->where('u.id', $id_skripsi_ujian)
+            ->first();
+
+        if (!$ujian) return response()->json(['error' => 'Data ujian tidak ditemukan.'], 404);
+
+        $is_penguji = false;
+        if ($id_dosen) {
+            // Pastikan dosen adalah salah satu penguji
+            $is_penguji = in_array($id_dosen, array_filter([
+                $ujian->id_penguji1, $ujian->id_penguji2, $ujian->id_penguji3
+            ]));
+            if (!$is_penguji) return response()->json(['error' => 'Anda tidak terdaftar sebagai penguji mahasiswa ini.'], 403);
+        }
+
+        // Ambil Berita Acara
+        $ba = DB::table('akd_skripsi_berita_acara')
+            ->where('id_skripsi_ujian', $id_skripsi_ujian)
+            ->first();
+
+        // Ambil nilai per CPMK dari semua penguji
+        $nilai_cpmk = DB::table('akd_skripsi_nilai_cpmk as nc')
+            ->join('akd_skripsi_rubrik_cpmk as r', 'nc.id_cpmk', '=', 'r.id')
+            ->select('nc.*', 'r.kode_cpmk', 'r.nama_cpmk', 'r.bobot')
+            ->where('nc.id_skripsi_ujian', $id_skripsi_ujian)
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'ujian'     => $ujian,
+                'berita_acara' => $ba,
+                'nilai_cpmk'   => $nilai_cpmk,
+                'is_penguji'   => $is_penguji,
+                'peran_saya'   => $id_dosen ? (($id_dosen == $ujian->id_penguji1) ? 'penguji1' :
+                                   (($id_dosen == $ujian->id_penguji2) ? 'penguji2' : 'penguji3')) : 'kaprodi',
+            ]
+        ]);
+    }
+
+    /**
+     * Dosen menyetujui (TTD digital) Berita Acara Penetapan
+     */
+    public function setuju_berita_acara(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'id_skripsi_ujian' => 'required',
+            'id_dosen'         => 'required',
+        ]);
+        if ($v->fails()) return response()->json(['error' => $v->errors()->all()], 422);
+
+        $id_skripsi_ujian = $request->id_skripsi_ujian;
+        $id_dosen = $request->id_dosen;
+
+        $ujian = DB::table('akd_skripsi_ujian')
+            ->where('id', $id_skripsi_ujian)->first();
+        if (!$ujian) return response()->json(['error' => 'Data ujian tidak ditemukan.'], 404);
+
+        $ba = DB::table('akd_skripsi_berita_acara')
+            ->where('id_skripsi_ujian', $id_skripsi_ujian)->first();
+        if (!$ba) return response()->json(['error' => 'Berita Acara belum dibuat. Pastikan semua penguji sudah input nilai.'], 404);
+
+        // Tentukan kolom setuju berdasarkan peran dosen
+        $updateField = null;
+        if ($id_dosen == $ujian->id_penguji1 && !$ba->setuju_penguji1) $updateField = 'setuju_penguji1';
+        elseif ($id_dosen == $ujian->id_penguji2 && !$ba->setuju_penguji2) $updateField = 'setuju_penguji2';
+        elseif ($id_dosen == $ujian->id_penguji3 && !$ba->setuju_penguji3) $updateField = 'setuju_penguji3';
+        else return response()->json(['error' => 'Anda sudah menyetujui atau tidak terdaftar sebagai penguji.'], 400);
+
+        DB::table('akd_skripsi_berita_acara')
+            ->where('id_skripsi_ujian', $id_skripsi_ujian)
+            ->update([$updateField => now(), 'updated_at' => now()]);
+
+        // Re-check: apakah semua penguji yang terdaftar sudah TTD?
+        $ba_updated = DB::table('akd_skripsi_berita_acara')
+            ->where('id_skripsi_ujian', $id_skripsi_ujian)->first();
+
+        $penguji_ids = array_filter([
+            $ujian->id_penguji1, $ujian->id_penguji2, $ujian->id_penguji3
+        ]);
+        $sudah_ttd = 0;
+        if ($ujian->id_penguji1 && $ba_updated->setuju_penguji1) $sudah_ttd++;
+        if ($ujian->id_penguji2 && $ba_updated->setuju_penguji2) $sudah_ttd++;
+        if ($ujian->id_penguji3 && $ba_updated->setuju_penguji3) $sudah_ttd++;
+
+        if ($sudah_ttd >= count($penguji_ids)) {
+            // Semua penguji sudah TTD → BA selesai
+            DB::table('akd_skripsi_berita_acara')
+                ->where('id_skripsi_ujian', $id_skripsi_ujian)
+                ->update(['status' => 'selesai', 'updated_at' => now()]);
+        }
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Persetujuan Berita Acara berhasil dicatat.',
+            'sudah_ttd' => $sudah_ttd,
+            'total_penguji' => count($penguji_ids),
+        ]);
+    }
+}

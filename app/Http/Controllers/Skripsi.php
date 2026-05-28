@@ -41,11 +41,13 @@ class Skripsi extends Controller
             'judul_en' => 'required',
             'abstrak' => 'required',
             'abstrak_en' => 'required',
+            'target_luaran' => 'nullable|string',
         ]);
 
         if ($v->fails()) return response()->json(['error' => $v->errors()], 422);
 
         $data = $request->only(['topik', 'topik_en', 'judul', 'judul_en', 'abstrak', 'abstrak_en']);
+        $data['target_luaran'] = $request->target_luaran ?? 'buku_skripsi';
         $data['updated_at'] = now();
 
         $skripsi = DB::table('akd_skripsi')->where('nim', $request->nim)->first();
@@ -82,6 +84,33 @@ class Skripsi extends Controller
 
         $mskripsi = new Mskripsi();
         $hasil = $mskripsi->cekKelayakan($nim, $fase);
+
+        $skripsi = DB::table('akd_skripsi')->where('nim', $nim)->first();
+        $hasil['judul_proposal'] = $skripsi ? $skripsi->judul : '';
+
+        // Add ta_is_obe and ujian_skripsi_lunas fields dynamically
+        $mhs = DB::table('akd_mahasiswa')->where('nim', $nim)->first();
+        $is_obe = 1;
+        $bayar_ujian = true;
+        if ($mhs) {
+            $prodiConfig = DB::table('akd_program_studi')
+                ->where('kode_program_studi', $mhs->kode_program_studi)
+                ->select('ta_komponen_bayar_ujian', 'ta_is_obe')
+                ->first();
+            if ($prodiConfig) {
+                $is_obe = isset($prodiConfig->ta_is_obe) ? $prodiConfig->ta_is_obe : 1;
+                $nama_biaya = $prodiConfig->ta_komponen_bayar_ujian ?: 'Ujian Skripsi';
+                if ($fase == 'ujian') {
+                    $bayar_ujian = DB::table('keu_tagihan')
+                        ->where('nim', $nim)
+                        ->where('nama_biaya', 'like', '%' . $nama_biaya . '%')
+                        ->where('status', '1')
+                        ->count() > 0;
+                }
+            }
+        }
+        $hasil['ta_is_obe'] = $is_obe;
+        $hasil['ujian_skripsi_lunas'] = $bayar_ujian;
 
         return response()->json([
             'status' => 'success',
@@ -367,5 +396,262 @@ class Skripsi extends Controller
         ]);
 
         return response()->json(['success' => 'Catatan bimbingan berhasil disimpan.']);
+    }
+
+    /**
+     * Admin: Rekap Bimbingan per Mahasiswa
+     */
+    public function rekap_bimbingan(Request $request)
+    {
+        $rows = DB::table('akd_skripsi as s')
+            ->join('akd_mahasiswa as m', 's.nim', '=', 'm.nim')
+            ->leftJoin('akd_program_studi as p', 'm.kode_program_studi', '=', 'p.kode_program_studi')
+            ->leftJoin('simpeg_pegawai as d', 's.id_dosen_pembimbing1', '=', 'd.id')
+            ->select(
+                's.id', 's.nim', 'm.nama_mahasiswa', 'p.nama_program_studi as prodi',
+                DB::raw("TRIM(CONCAT_WS(' ', d.gelar_depan, d.nama, d.gelar_belakang)) as pembimbing"),
+                DB::raw("(CASE WHEN s.fase_aktif = 'ujian' THEN 8 ELSE COALESCE(p.ta_minimal_bimbingan, 8) END) as min_bimbingan"),
+                DB::raw("(SELECT COUNT(*) FROM akd_skripsi_bimbingan b WHERE b.id_skripsi = s.id AND b.status IN ('disetujui','revisi')) as total_bimbingan")
+            )
+            ->orderBy('m.nama_mahasiswa', 'asc')
+            ->get();
+
+        return response()->json(['status' => 'success', 'data' => $rows]);
+    }
+
+    /**
+     * Get Realisasi & Target Luaran Skripsi
+     */
+    public function get_luaran(Request $request)
+    {
+        $nim = $request->nim;
+        if (!$nim) return response()->json(['error' => 'Parameter nim diperlukan'], 400);
+
+        $skripsi = DB::table('akd_skripsi')->where('nim', $nim)->first();
+        if (!$skripsi) return response()->json(['error' => 'Data skripsi tidak ditemukan'], 404);
+
+        $luaran = DB::table('akd_skripsi_luaran')->where('id_skripsi', $skripsi->id)->first();
+        
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'target_luaran' => $skripsi->target_luaran,
+                'luaran' => $luaran
+            ]
+        ]);
+    }
+
+    /**
+     * Simpan/Update Realisasi Luaran Skripsi
+     */
+    public function simpan_luaran(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'nim' => 'required',
+            'jenis_luaran' => 'required|in:buku_skripsi,jurnal_sinta,jurnal_internasional,prosiding,paten,hki,lainnya',
+            'judul_luaran' => 'nullable|string',
+            'nama_media' => 'nullable|string',
+            'url_link' => 'nullable|string',
+            'file_bukti' => 'nullable|file|mimes:pdf,jpg,png,jpeg|max:5120'
+        ]);
+
+        if ($v->fails()) return response()->json(['error' => $v->errors()->all()], 422);
+
+        $skripsi = DB::table('akd_skripsi')->where('nim', $request->nim)->first();
+        if (!$skripsi) return response()->json(['error' => 'Data skripsi tidak ditemukan'], 404);
+
+        $data = [
+            'jenis_luaran' => $request->jenis_luaran,
+            'judul_luaran' => $request->judul_luaran,
+            'nama_media' => $request->nama_media,
+            'url_link' => $request->url_link,
+            'updated_at' => now()
+        ];
+
+        if ($request->hasFile('file_bukti')) {
+            $file = $request->file('file_bukti');
+            $path = $file->store('skripsi_luaran_bukti', 'public');
+            $data['file_bukti'] = $path;
+        }
+
+        $luaran = DB::table('akd_skripsi_luaran')->where('id_skripsi', $skripsi->id)->first();
+
+        if ($luaran) {
+            DB::table('akd_skripsi_luaran')->where('id_skripsi', $skripsi->id)->update($data);
+        } else {
+            $data['id_skripsi'] = $skripsi->id;
+            $data['nim'] = $request->nim;
+            $data['status_validasi'] = 'menunggu';
+            $data['created_at'] = now();
+            DB::table('akd_skripsi_luaran')->insert($data);
+        }
+
+        // Sinkronisasi target_luaran ke tabel utama akd_skripsi
+        DB::table('akd_skripsi')
+            ->where('id', $skripsi->id)
+            ->update(['target_luaran' => $request->jenis_luaran]);
+
+        return response()->json(['success' => 'Data Realisasi Luaran Berhasil Disimpan']);
+    }
+
+    /**
+     * Ajukan Pendaftaran Ujian Skripsi
+     */
+    public function ajukan_ujian(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'nim' => 'required'
+        ]);
+
+        if ($v->fails()) return response()->json(['error' => $v->errors()->all()], 422);
+
+        $nim = $request->nim;
+        $skripsi = DB::table('akd_skripsi')->where('nim', $nim)->first();
+        if (!$skripsi) return response()->json(['error' => 'Data skripsi belum ada.'], 400);
+
+        $ujian = DB::table('akd_skripsi_ujian')
+            ->where('id_skripsi', $skripsi->id)
+            ->where('nim', $nim)
+            ->first();
+
+        if (!$ujian) {
+            // Ambil proposal/naskah terakhir jika ada
+            $latestProposal = DB::table('akd_skripsi_proposal')
+                ->where('id_skripsi', $skripsi->id)
+                ->where('nim', $nim)
+                ->orderBy('iterasi', 'desc')
+                ->first();
+            
+            $id_proposal = $latestProposal ? $latestProposal->id : null;
+
+            // Inisialisasi otomatis pendaftaran ujian
+            $ujianId = DB::table('akd_skripsi_ujian')->insertGetId([
+                'id_skripsi' => $skripsi->id,
+                'nim' => $nim,
+                'id_proposal' => $id_proposal,
+                'status' => 'pending',
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+
+            $ujian = DB::table('akd_skripsi_ujian')->where('id', $ujianId)->first();
+        }
+
+        if (in_array($ujian->status, ['diajukan', 'dijadwalkan', 'lulus'])) {
+            return response()->json(['error' => 'Pendaftaran ujian sudah diajukan sebelumnya.'], 409);
+        }
+
+        // Update judul jika dikirimkan dari form pendaftaran ujian
+        if ($request->has('judul') && !empty($request->judul)) {
+            DB::table('akd_skripsi')
+                ->where('id', $skripsi->id)
+                ->update(['judul' => $request->judul]);
+        }
+
+        DB::table('akd_skripsi_ujian')
+            ->where('id', $ujian->id)
+            ->update([
+                'status' => 'diajukan',
+                'updated_at' => now()
+            ]);
+
+        return response()->json(['success' => 'Pendaftaran ujian skripsi berhasil diajukan.']);
+    }
+
+    /**
+     * Ambil Portofolio Pencapaian CPL Skripsi Mahasiswa
+     */
+    public function get_portofolio_cpl(Request $request)
+    {
+        $nim = $request->nim;
+        if (!$nim) return response()->json(['error' => 'Parameter nim diperlukan'], 400);
+
+        $skripsi = DB::table('akd_skripsi')->where('nim', $nim)->first();
+        if (!$skripsi) return response()->json(['error' => 'Data skripsi tidak ditemukan.'], 404);
+
+        $ujian = DB::table('akd_skripsi_ujian')
+            ->where('id_skripsi', $skripsi->id)
+            ->where('nim', $nim)
+            ->first();
+
+        if (!$ujian) {
+            return response()->json([
+                'status' => 'success',
+                'data' => null
+            ]);
+        }
+
+        // Ambil nilai per CPMK
+        $scores = DB::table('akd_skripsi_nilai_cpmk')
+            ->where('id_skripsi_ujian', $ujian->id)
+            ->get();
+
+        if ($scores->count() == 0) {
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'nilai_angka' => $ujian->nilai_angka,
+                    'nilai_ujian' => $ujian->nilai_ujian,
+                    'status_ujian' => $ujian->status,
+                    'cpl_portfolio' => [],
+                    'cpmk_scores' => []
+                ]
+            ]);
+        }
+
+        // Ambil kriteria CPMK dan pemetaan CPL
+        $cpmk_cpl = DB::table('akd_skripsi_cpmk_cpl as cc')
+            ->join('akd_skripsi_rubrik_cpmk as r', 'cc.id_cpmk', '=', 'r.id')
+            ->select('cc.kode_cpl', 'r.id as id_cpmk', 'r.kode_cpmk', 'r.nama_cpmk')
+            ->get();
+
+        // Hitung rata-rata nilai per CPMK dari semua penguji/verifikator
+        $cpmk_averages = [];
+        $grouped_scores = $scores->groupBy('id_cpmk');
+        foreach ($grouped_scores as $cpmk_id => $cpmk_scores) {
+            $cpmk_averages[$cpmk_id] = $cpmk_scores->avg('nilai');
+        }
+
+        // Group by CPL dan hitung pencapaian
+        $cpl_achievements = [];
+        $cpl_groups = $cpmk_cpl->groupBy('kode_cpl');
+        foreach ($cpl_groups as $cpl_code => $mappings) {
+            $sum = 0;
+            $count = 0;
+            foreach ($mappings as $m) {
+                if (isset($cpmk_averages[$m->id_cpmk])) {
+                    $sum += $cpmk_averages[$m->id_cpmk];
+                    $count++;
+                }
+            }
+            if ($count > 0) {
+                $cpl_achievements[] = [
+                    'cpl' => $cpl_code,
+                    'achievement' => round($sum / $count, 2)
+                ];
+            }
+        }
+
+        $cpmk_scores_formatted = [];
+        foreach ($cpmk_averages as $cpmk_id => $avg) {
+            $item = $cpmk_cpl->firstWhere('id_cpmk', $cpmk_id);
+            $cpmk_scores_formatted[] = [
+                'id_cpmk' => $cpmk_id,
+                'kode_cpmk' => $item ? $item->kode_cpmk : '',
+                'nama_cpmk' => $item ? $item->nama_cpmk : 'Kriteria ' . $cpmk_id,
+                'nilai' => round($avg, 2)
+            ];
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'nilai_angka' => $ujian->nilai_angka,
+                'nilai_ujian' => $ujian->nilai_ujian,
+                'status_ujian' => $ujian->status,
+                'cpl_portfolio' => $cpl_achievements,
+                'cpmk_scores' => $cpmk_scores_formatted
+            ]
+        ]);
     }
 }

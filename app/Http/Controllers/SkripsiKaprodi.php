@@ -582,12 +582,13 @@ class SkripsiKaprodi extends Controller
                 ->get();
         }
 
-        // Include mapped CPLs for each CPMK
+        // Include mapped CPLs for each CPMK (supporting comma separated multi-CPL)
         foreach ($rows as $r) {
-            $cpl = DB::table('akd_skripsi_cpmk_cpl')
+            $cpls = DB::table('akd_skripsi_cpmk_cpl')
                 ->where('id_cpmk', $r->id)
-                ->first();
-            $r->kode_cpl = $cpl ? $cpl->kode_cpl : '';
+                ->pluck('kode_cpl')
+                ->toArray();
+            $r->kode_cpl = implode(', ', $cpls);
         }
 
         return response()->json([
@@ -603,7 +604,7 @@ class SkripsiKaprodi extends Controller
     {
         $v = Validator::make($request->all(), [
             'kode_prodi' => 'required',
-            'rubrik' => 'required|array', // array of { id_cpmk/new, kode_cpmk, nama_cpmk, bobot, kode_cpl }
+            'rubrik' => 'required|array', // array of { id_cpmk/new, kode_cpmk, nama_cpmk, bobot, kkm, kode_cpl }
         ]);
 
         if ($v->fails()) return response()->json(['error' => $v->errors()->all()], 422);
@@ -624,7 +625,9 @@ class SkripsiKaprodi extends Controller
             $old_rubrics = DB::table('akd_skripsi_rubrik_cpmk')->where('kode_prodi', $kode_prodi)->get();
             $old_ids = $old_rubrics->pluck('id')->toArray();
             
-            DB::table('akd_skripsi_cpmk_cpl')->whereIn('id_cpmk', $old_ids)->delete();
+            if (!empty($old_ids)) {
+                DB::table('akd_skripsi_cpmk_cpl')->whereIn('id_cpmk', $old_ids)->delete();
+            }
             DB::table('akd_skripsi_rubrik_cpmk')->where('kode_prodi', $kode_prodi)->delete();
 
             // Insert new custom rubrics
@@ -634,18 +637,22 @@ class SkripsiKaprodi extends Controller
                     'kode_cpmk' => $r['kode_cpmk'],
                     'nama_cpmk' => $r['nama_cpmk'],
                     'bobot' => floatval($r['bobot']),
+                    'kkm' => floatval($r['kkm'] ?? 70.00),
                     'kode_prodi' => $kode_prodi,
                     'created_at' => $now,
                     'updated_at' => $now
                 ]);
 
                 if (!empty($r['kode_cpl'])) {
-                    DB::table('akd_skripsi_cpmk_cpl')->insert([
-                        'id_cpmk' => $id,
-                        'kode_cpl' => $r['kode_cpl'],
-                        'created_at' => $now,
-                        'updated_at' => $now
-                    ]);
+                    $cpl_codes = array_filter(array_map('trim', explode(',', $r['kode_cpl'])));
+                    foreach ($cpl_codes as $cpl_code) {
+                        DB::table('akd_skripsi_cpmk_cpl')->insert([
+                            'id_cpmk' => $id,
+                            'kode_cpl' => $cpl_code,
+                            'created_at' => $now,
+                            'updated_at' => $now
+                        ]);
+                    }
                 }
             }
 
@@ -656,7 +663,6 @@ class SkripsiKaprodi extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
-
     /**
      * Reset/Delete CPMK Rubrics for Kaprodi
      */

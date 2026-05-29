@@ -598,11 +598,10 @@ class Skripsi extends Controller
                 ]
             ]);
         }
-
-        // Ambil kriteria CPMK dan pemetaan CPL
+        // Ambil kriteria CPMK dan pemetaan CPL (termasuk KKM)
         $cpmk_cpl = DB::table('akd_skripsi_cpmk_cpl as cc')
             ->join('akd_skripsi_rubrik_cpmk as r', 'cc.id_cpmk', '=', 'r.id')
-            ->select('cc.kode_cpl', 'r.id as id_cpmk', 'r.kode_cpmk', 'r.nama_cpmk')
+            ->select('cc.kode_cpl', 'r.id as id_cpmk', 'r.kode_cpmk', 'r.nama_cpmk', 'r.kkm')
             ->get();
 
         // Hitung rata-rata nilai per CPMK dari semua penguji/verifikator
@@ -625,9 +624,11 @@ class Skripsi extends Controller
                 }
             }
             if ($count > 0) {
+                $achievement = round($sum / $count, 2);
                 $cpl_achievements[] = [
                     'cpl' => $cpl_code,
-                    'achievement' => round($sum / $count, 2)
+                    'achievement' => $achievement,
+                    'status' => $achievement >= 70.00 ? 'Tercapai' : 'Perlu Penguatan'
                 ];
             }
         }
@@ -635,11 +636,14 @@ class Skripsi extends Controller
         $cpmk_scores_formatted = [];
         foreach ($cpmk_averages as $cpmk_id => $avg) {
             $item = $cpmk_cpl->firstWhere('id_cpmk', $cpmk_id);
+            $kkm = $item ? (float)$item->kkm : 70.00;
             $cpmk_scores_formatted[] = [
                 'id_cpmk' => $cpmk_id,
                 'kode_cpmk' => $item ? $item->kode_cpmk : '',
                 'nama_cpmk' => $item ? $item->nama_cpmk : 'Kriteria ' . $cpmk_id,
-                'nilai' => round($avg, 2)
+                'nilai' => round($avg, 2),
+                'kkm' => $kkm,
+                'status' => round($avg, 2) >= $kkm ? 'Lulus' : 'Belum Lulus'
             ];
         }
 

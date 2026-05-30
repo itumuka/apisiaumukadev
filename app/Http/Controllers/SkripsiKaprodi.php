@@ -695,6 +695,166 @@ class SkripsiKaprodi extends Controller
     }
 
     /**
+     * Master Data CPL - Get CPL for Kaprodi
+     */
+    public function get_cpl($kode_prodi, Request $request)
+    {
+        $query = DB::table('akd_cpl')
+            ->where(function ($q) use ($kode_prodi) {
+                $q->where('kode_prodi', $kode_prodi)
+                  ->orWhereNull('kode_prodi');
+            });
+
+        if ($request->has('tahun') && !empty($request->tahun)) {
+            $query->where('tahun_kurikulum', $request->tahun);
+        }
+
+        $cpls = $query->orderBy('tahun_kurikulum', 'desc')
+            ->orderBy('kode_cpl', 'asc')
+            ->get();
+
+        foreach ($cpls as $c) {
+            // Count how many CPMK uses this CPL for the active prodi
+            $c->jumlah_cpmk = DB::table('akd_skripsi_cpmk_cpl as cc')
+                ->join('akd_skripsi_rubrik_cpmk as r', 'cc.id_cpmk', '=', 'r.id')
+                ->where('r.kode_prodi', $kode_prodi)
+                ->where('cc.kode_cpl', $c->kode_cpl)
+                ->count();
+
+            // Lembaga Pemilik
+            if ($c->level === 'Program Studi') {
+                $c->lembaga_pemilik = DB::table('akd_program_studi')
+                    ->where('kode_program_studi', $c->kode_prodi ?? $kode_prodi)
+                    ->value('nama_program_studi') ?? 'Program Studi';
+            } elseif ($c->level === 'Fakultas') {
+                $c->lembaga_pemilik = 'Fakultas';
+            } else {
+                $c->lembaga_pemilik = 'Universitas';
+            }
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $cpls
+        ]);
+    }
+
+    /**
+     * Master Data CPL - Save/Update CPL
+     */
+    public function save_cpl(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'kode_prodi' => 'required',
+            'kode_cpl' => 'required|max:50',
+            'kode_kategori' => 'required|max:100',
+            'deskripsi' => 'required',
+            'tahun_kurikulum' => 'required|max:10',
+            'level' => 'required|in:Program Studi,Fakultas,Universitas',
+            'is_aktif' => 'required'
+        ]);
+
+        if ($v->fails()) {
+            return response()->json(['error' => $v->errors()->all()], 422);
+        }
+
+        $is_aktif = filter_var($request->is_aktif, FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
+        $kode_cpl = strtoupper(trim($request->kode_cpl));
+        $tahun_kurikulum = trim($request->tahun_kurikulum);
+        $kode_prodi = $request->kode_prodi;
+
+        $data = [
+            'kode_prodi' => $kode_prodi,
+            'kode_cpl' => $kode_cpl,
+            'kode_kategori' => trim($request->kode_kategori),
+            'deskripsi' => trim($request->deskripsi),
+            'tahun_kurikulum' => $tahun_kurikulum,
+            'level' => $request->level,
+            'is_aktif' => $is_aktif,
+            'updated_at' => now()
+        ];
+
+        if ($request->has('id') && !empty($request->id)) {
+            // Update
+            DB::table('akd_cpl')
+                ->where('id', $request->id)
+                ->update($data);
+            $msg = 'CPL berhasil diperbarui.';
+        } else {
+            // Create - check duplicate first
+            $exists = DB::table('akd_cpl')
+                ->where('kode_prodi', $kode_prodi)
+                ->where('kode_cpl', $kode_cpl)
+                ->where('tahun_kurikulum', $tahun_kurikulum)
+                ->exists();
+
+            if ($exists) {
+                return response()->json(['error' => 'Kode CPL ' . $kode_cpl . ' sudah terdaftar untuk kurikulum ' . $tahun_kurikulum], 422);
+            }
+
+            $data['created_at'] = now();
+            DB::table('akd_cpl')->insert($data);
+            $msg = 'CPL berhasil ditambahkan.';
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $msg
+        ]);
+    }
+
+    /**
+     * Master Data CPL - Delete CPL
+     */
+    public function delete_cpl($id, Request $request)
+    {
+        $cpl = DB::table('akd_cpl')->where('id', $id)->first();
+        if (!$cpl) {
+            return response()->json(['error' => 'CPL tidak ditemukan.'], 404);
+        }
+
+        // Check if CPL is mapped to any CPMK for this prodi
+        $mappedCount = DB::table('akd_skripsi_cpmk_cpl as cc')
+            ->join('akd_skripsi_rubrik_cpmk as r', 'cc.id_cpmk', '=', 'r.id')
+            ->where('r.kode_prodi', $cpl->kode_prodi)
+            ->where('cc.kode_cpl', $cpl->kode_cpl)
+            ->count();
+
+        if ($mappedCount > 0) {
+            return response()->json(['error' => 'CPL ' . $cpl->kode_cpl . ' tidak dapat dihapus karena sedang dipetakan ke ' . $mappedCount . ' CPMK.'], 422);
+        }
+
+        DB::table('akd_cpl')->where('id', $id)->delete();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'CPL berhasil dihapus.'
+        ]);
+    }
+
+    /**
+     * Master Data CPL - Toggle Active Status
+     */
+    public function toggle_cpl($id, Request $request)
+    {
+        $cpl = DB::table('akd_cpl')->where('id', $id)->first();
+        if (!$cpl) {
+            return response()->json(['error' => 'CPL tidak ditemukan.'], 404);
+        }
+
+        $newStatus = $cpl->is_aktif ? 0 : 1;
+        DB::table('akd_cpl')->where('id', $id)->update([
+            'is_aktif' => $newStatus,
+            'updated_at' => now()
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Status aktif CPL berhasil diperbarui.'
+        ]);
+    }
+
+    /**
      * Get requirements config for a prodi
      */
     public function list_syarat_prodi($kode_prodi)

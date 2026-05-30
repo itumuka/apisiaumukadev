@@ -598,10 +598,23 @@ class Skripsi extends Controller
                 ]
             ]);
         }
+        $mhs = DB::table('akd_mahasiswa')->where('nim', $nim)->first();
+        $kode_prodi = $mhs ? $mhs->kode_program_studi : null;
+
         // Ambil kriteria CPMK dan pemetaan CPL (termasuk KKM)
         $cpmk_cpl = DB::table('akd_skripsi_cpmk_cpl as cc')
             ->join('akd_skripsi_rubrik_cpmk as r', 'cc.id_cpmk', '=', 'r.id')
-            ->select('cc.kode_cpl', 'r.id as id_cpmk', 'r.kode_cpmk', 'r.nama_cpmk', 'r.kkm')
+            ->leftJoin('akd_cpl as c', function ($join) use ($kode_prodi) {
+                $join->on('cc.kode_cpl', '=', 'c.kode_cpl')
+                     ->where('c.is_aktif', 1)
+                     ->where(function ($q) use ($kode_prodi) {
+                         if ($kode_prodi) {
+                             $q->where('c.kode_prodi', $kode_prodi)
+                               ->orWhereNull('c.kode_prodi');
+                         }
+                     });
+            })
+            ->select('cc.kode_cpl', 'c.deskripsi as cpl_deskripsi', 'r.id as id_cpmk', 'r.kode_cpmk', 'r.nama_cpmk', 'r.kkm')
             ->get();
 
         // Hitung rata-rata nilai per CPMK dari semua penguji/verifikator
@@ -627,6 +640,7 @@ class Skripsi extends Controller
                 $achievement = round($sum / $count, 2);
                 $cpl_achievements[] = [
                     'cpl' => $cpl_code,
+                    'deskripsi' => $mappings->first()->cpl_deskripsi ?? '',
                     'achievement' => $achievement,
                     'status' => $achievement >= 70.00 ? 'Tercapai' : 'Perlu Penguatan'
                 ];

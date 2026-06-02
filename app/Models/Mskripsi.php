@@ -198,7 +198,14 @@ class Mskripsi extends Model
             }
             
             if ($fase == 'ujian' && $prodiConfig->ta_komponen_bayar_ujian) {
-                $hasUjianScholarship = DB::table('keu_beasiswa_mahasiswa as bm')
+                $hasFullScholarship = DB::table('keu_beasiswa_mahasiswa as bm')
+                    ->join('keu_sumber_beasiswa as s', 'bm.id_sumber_beasiswa', '=', 's.id_sumber_beasiswa')
+                    ->where('bm.nim', $nim)
+                    ->where('bm.status_aktif', 1)
+                    ->where('s.jenis_beasiswa', 'full')
+                    ->exists();
+
+                $hasUjianScholarship = $hasFullScholarship || DB::table('keu_beasiswa_mahasiswa as bm')
                     ->join('keu_beasiswa_cakupan as bc', 'bm.id_sumber_beasiswa', '=', 'bc.id_sumber_beasiswa')
                     ->where('bm.nim', $nim)
                     ->where('bm.status_aktif', 1)
@@ -380,7 +387,14 @@ class Mskripsi extends Model
                     $nama_biaya = $rule->nilai_target ?: ($fase == 'sempro' ? 'Bimbingan Skripsi' : 'Ujian Skripsi');
                 }
                 
-                $hasScholarship = DB::table('keu_beasiswa_mahasiswa as bm')
+                $hasFullScholarship = DB::table('keu_beasiswa_mahasiswa as bm')
+                    ->join('keu_sumber_beasiswa as s', 'bm.id_sumber_beasiswa', '=', 's.id_sumber_beasiswa')
+                    ->where('bm.nim', $nim)
+                    ->where('bm.status_aktif', 1)
+                    ->where('s.jenis_beasiswa', 'full')
+                    ->exists();
+
+                $hasScholarship = $hasFullScholarship || DB::table('keu_beasiswa_mahasiswa as bm')
                     ->join('keu_beasiswa_cakupan as bc', 'bm.id_sumber_beasiswa', '=', 'bc.id_sumber_beasiswa')
                     ->where('bm.nim', $nim)
                     ->where('bm.status_aktif', 1)
@@ -526,7 +540,14 @@ class Mskripsi extends Model
         // 2. Stats Akademik
         $stats = $this->getAcademicStats($nim);
 
-        $hasTaScholarship = DB::table('keu_beasiswa_mahasiswa as bm')
+        $hasFullScholarship = DB::table('keu_beasiswa_mahasiswa as bm')
+            ->join('keu_sumber_beasiswa as s', 'bm.id_sumber_beasiswa', '=', 's.id_sumber_beasiswa')
+            ->where('bm.nim', $nim)
+            ->where('bm.status_aktif', 1)
+            ->where('s.jenis_beasiswa', 'full')
+            ->exists();
+
+        $hasTaScholarship = $hasFullScholarship || DB::table('keu_beasiswa_mahasiswa as bm')
             ->join('keu_beasiswa_cakupan as bc', 'bm.id_sumber_beasiswa', '=', 'bc.id_sumber_beasiswa')
             ->where('bm.nim', $nim)
             ->where('bm.status_aktif', 1)
@@ -545,7 +566,14 @@ class Mskripsi extends Model
             ->where('status', '1')
             ->count() > 0 : true); // Jika tidak ada komponen biaya, anggap sudah lunas
         
-        $hasUjianScholarship = DB::table('keu_beasiswa_mahasiswa as bm')
+        $hasFullScholarship = DB::table('keu_beasiswa_mahasiswa as bm')
+            ->join('keu_sumber_beasiswa as s', 'bm.id_sumber_beasiswa', '=', 's.id_sumber_beasiswa')
+            ->where('bm.nim', $nim)
+            ->where('bm.status_aktif', 1)
+            ->where('s.jenis_beasiswa', 'full')
+            ->exists();
+
+        $hasUjianScholarship = $hasFullScholarship || DB::table('keu_beasiswa_mahasiswa as bm')
             ->join('keu_beasiswa_cakupan as bc', 'bm.id_sumber_beasiswa', '=', 'bc.id_sumber_beasiswa')
             ->where('bm.nim', $nim)
             ->where('bm.status_aktif', 1)

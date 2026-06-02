@@ -198,11 +198,22 @@ class Mskripsi extends Model
             }
             
             if ($fase == 'ujian' && $prodiConfig->ta_komponen_bayar_ujian) {
-                $bayar_ujian = DB::table('keu_tagihan')
+                $hasUjianScholarship = DB::table('keu_beasiswa_mahasiswa as bm')
+                    ->join('keu_beasiswa_cakupan as bc', 'bm.id_sumber_beasiswa', '=', 'bc.id_sumber_beasiswa')
+                    ->where('bm.nim', $nim)
+                    ->where('bm.status_aktif', 1)
+                    ->where('bc.persentase_potongan', 100.00)
+                    ->where(function($q) use ($prodiConfig) {
+                        $q->where('bc.kode_komponen', 'like', '%' . $prodiConfig->ta_komponen_bayar_ujian . '%')
+                          ->orWhere('bc.kode_komponen', 'like', '%Ujian%');
+                    })
+                    ->exists();
+
+                $bayar_ujian = $hasUjianScholarship || (DB::table('keu_tagihan')
                     ->where('nim', $nim)
                     ->where('nama_biaya', 'like', '%' . $prodiConfig->ta_komponen_bayar_ujian . '%')
                     ->where('status', '1')
-                    ->count() > 0;
+                    ->count() > 0);
                 
                 if (!$bayar_ujian) $semua_lolos = false;
                 
@@ -369,13 +380,27 @@ class Mskripsi extends Model
                     $nama_biaya = $rule->nilai_target ?: ($fase == 'sempro' ? 'Bimbingan Skripsi' : 'Ujian Skripsi');
                 }
                 
-                $cek_tagihan = DB::table('keu_tagihan')
+                $hasScholarship = DB::table('keu_beasiswa_mahasiswa as bm')
+                    ->join('keu_beasiswa_cakupan as bc', 'bm.id_sumber_beasiswa', '=', 'bc.id_sumber_beasiswa')
+                    ->where('bm.nim', $nim)
+                    ->where('bm.status_aktif', 1)
+                    ->where('bc.persentase_potongan', 100.00)
+                    ->where(function($q) use ($nama_biaya) {
+                        $q->where('bc.kode_komponen', 'like', '%' . $nama_biaya . '%')
+                          ->orWhere('bc.kode_komponen', 'like', '%Skripsi%')
+                          ->orWhere('bc.kode_komponen', 'like', '%Tugas Akhir%')
+                          ->orWhere('bc.kode_komponen', 'like', '%TA%')
+                          ->orWhere('bc.kode_komponen', 'like', '%Ujian%');
+                    })
+                    ->exists();
+
+                $cek_tagihan = $hasScholarship || (DB::table('keu_tagihan')
                     ->where('nim', $nim)
                     ->where('nama_biaya', 'like', '%' . $nama_biaya . '%')
                     ->where('status', '1')
-                    ->count();
-                $isi_aktual = $cek_tagihan > 0 ? 'Sudah Lunas' : 'Belum Lunas';
-                $is_terpenuhi = $cek_tagihan > 0;
+                    ->count() > 0);
+                $isi_aktual = $cek_tagihan ? 'Sudah Lunas' : 'Belum Lunas';
+                $is_terpenuhi = $cek_tagihan;
                 $status_ikon = $is_terpenuhi ? 'v' : 'x';
             }
             else if ($rule->jenis == 'berkas') {
@@ -501,17 +526,41 @@ class Mskripsi extends Model
         // 2. Stats Akademik
         $stats = $this->getAcademicStats($nim);
 
-        $bayar_ta = ($mhs->ta_komponen_bayar) ? DB::table('keu_tagihan')
+        $hasTaScholarship = DB::table('keu_beasiswa_mahasiswa as bm')
+            ->join('keu_beasiswa_cakupan as bc', 'bm.id_sumber_beasiswa', '=', 'bc.id_sumber_beasiswa')
+            ->where('bm.nim', $nim)
+            ->where('bm.status_aktif', 1)
+            ->where('bc.persentase_potongan', 100.00)
+            ->where(function($q) use ($mhs) {
+                $q->where('bc.kode_komponen', 'like', '%' . ($mhs->ta_komponen_bayar ?: 'Skripsi') . '%')
+                  ->orWhere('bc.kode_komponen', 'like', '%Skripsi%')
+                  ->orWhere('bc.kode_komponen', 'like', '%Tugas Akhir%')
+                  ->orWhere('bc.kode_komponen', 'like', '%TA%');
+            })
+            ->exists();
+
+        $bayar_ta = $hasTaScholarship || (($mhs->ta_komponen_bayar) ? DB::table('keu_tagihan')
             ->where('nim', $nim)
             ->where('nama_biaya', 'like', '%' . $mhs->ta_komponen_bayar . '%')
             ->where('status', '1')
-            ->count() > 0 : true; // Jika tidak ada komponen biaya, anggap sudah lunas
+            ->count() > 0 : true); // Jika tidak ada komponen biaya, anggap sudah lunas
         
-        $bayar_ujian = ($mhs->ta_komponen_bayar_ujian) ? DB::table('keu_tagihan')
+        $hasUjianScholarship = DB::table('keu_beasiswa_mahasiswa as bm')
+            ->join('keu_beasiswa_cakupan as bc', 'bm.id_sumber_beasiswa', '=', 'bc.id_sumber_beasiswa')
+            ->where('bm.nim', $nim)
+            ->where('bm.status_aktif', 1)
+            ->where('bc.persentase_potongan', 100.00)
+            ->where(function($q) use ($mhs) {
+                $q->where('bc.kode_komponen', 'like', '%' . ($mhs->ta_komponen_bayar_ujian ?: 'Ujian') . '%')
+                  ->orWhere('bc.kode_komponen', 'like', '%Ujian%');
+            })
+            ->exists();
+
+        $bayar_ujian = $hasUjianScholarship || (($mhs->ta_komponen_bayar_ujian) ? DB::table('keu_tagihan')
             ->where('nim', $nim)
             ->where('nama_biaya', 'like', '%' . $mhs->ta_komponen_bayar_ujian . '%')
             ->where('status', '1')
-            ->count() > 0 : true;
+            ->count() > 0 : true);
 
         // 4. Data Skripsi Induk
         $skripsi = DB::table('akd_skripsi as s')

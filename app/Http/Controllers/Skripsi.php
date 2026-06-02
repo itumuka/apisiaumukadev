@@ -99,13 +99,18 @@ class Skripsi extends Controller
                 ->first();
             if ($prodiConfig) {
                 $is_obe = isset($prodiConfig->ta_is_obe) ? $prodiConfig->ta_is_obe : 1;
-                $nama_biaya = $prodiConfig->ta_komponen_bayar_ujian ?: 'Ujian Skripsi';
                 if ($fase == 'ujian') {
-                    $bayar_ujian = DB::table('keu_tagihan')
-                        ->where('nim', $nim)
-                        ->where('nama_biaya', 'like', '%' . $nama_biaya . '%')
-                        ->where('status', '1')
-                        ->count() > 0;
+                    if (!empty($prodiConfig->ta_komponen_bayar_ujian)) {
+                        $nama_biaya = $prodiConfig->ta_komponen_bayar_ujian;
+                        $bayar_ujian = DB::table('keu_tagihan')
+                            ->where('nim', $nim)
+                            ->where('nama_biaya', 'like', '%' . $nama_biaya . '%')
+                            ->where('status', '1')
+                            ->count() > 0;
+                    } else {
+                        // Jika komponen bayar ujian kosong (seperti D3 Tugas Akhir), dianggap lunas / tanpa bayar ujian
+                        $bayar_ujian = true;
+                    }
                 }
             }
         }

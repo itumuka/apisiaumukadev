@@ -54,17 +54,228 @@ class SkripsiKaprodi extends Controller
             return response()->json(['error' => $validation->errors()->all()], 422);
         }
 
-        DB::table('akd_skripsi')
-            ->where('id', $request->id_skripsi)
-            ->update([
-                'id_dosen_pembimbing1' => $request->id_dosen_pembimbing1,
-                'id_dosen_pembimbing2' => $request->id_dosen_pembimbing2,
-                'status' => 'aktif',
-                'fase_aktif' => 'bimbingan',
-                'updated_at' => now()
-            ]);
+        $id_skripsi = $request->id_skripsi;
+        $pembimbing1 = $request->id_dosen_pembimbing1;
+        $pembimbing2 = $request->id_dosen_pembimbing2;
 
-        return response()->json(['success' => 'Ploting pembimbing berhasil disimpan dan status skripsi diaktifkan.']);
+        DB::beginTransaction();
+        try {
+            // 1. Ambil data skripsi
+            $skripsi = DB::table('akd_skripsi')->where('id', $id_skripsi)->first();
+            if (!$skripsi) {
+                DB::rollBack();
+                return response()->json(['error' => 'Data skripsi tidak ditemukan.'], 404);
+            }
+
+            $nim = $skripsi->nim;
+
+            // Update data skripsi utama
+            DB::table('akd_skripsi')
+                ->where('id', $id_skripsi)
+                ->update([
+                    'id_dosen_pembimbing1' => $pembimbing1,
+                    'id_dosen_pembimbing2' => $pembimbing2,
+                    'status' => 'aktif',
+                    'fase_aktif' => 'bimbingan',
+                    'updated_at' => now()
+                ]);
+
+            // 2. Sinkronisasi KRS jika ada
+            // Dapatkan tahun/semester aktif dari akd_mreg
+            $cekta = DB::table('akd_mreg')->where('trash', '1')->first();
+            if ($cekta) {
+                $ta = $cekta->tahun;
+                $smt = $cekta->semester;
+
+                // Cari heregistrasi & KRS
+                $hereg = DB::table('akd_heregistrasi')
+                    ->where('nim', $nim)
+                    ->where('tahun', $ta)
+                    ->where('semester', $smt)
+                    ->first();
+
+                if ($hereg) {
+                    $krs = DB::table('akd_krs')
+                        ->where('id_heregistrasi', $hereg->id_heregistrasi)
+                        ->first();
+
+                    if ($krs) {
+                        $id_krs = $krs->id_krs;
+
+                        // Cari matakuliah Skripsi / Tugas Akhir / Laporan Tugas Akhir yang ditawarkan untuk prodi mahasiswa tersebut di semester aktif
+                        $mhs = DB::table('akd_mahasiswa')->where('nim', $nim)->first();
+                        $kode_prodi = $mhs ? $mhs->kode_program_studi : null;
+
+                        if ($kode_prodi) {
+                            // Cari penawaran matakuliah Skripsi/TA dasar untuk program studi tersebut
+                            $penawaran_dasar = DB::table('akd_penawaran_matakuliah as pm')
+                                ->join('akd_matakuliah as mk', 'pm.id_matakuliah', '=', 'mk.id_matakuliah')
+                                ->where('pm.tahun', $ta)
+                                ->where('pm.semester', $smt)
+                                ->where('pm.kode_program_studi', $kode_prodi)
+                                ->where(function($q) {
+                                    $q->where('mk.nama_matakuliah', 'like', '%Skripsi%')
+                                      ->orWhere('mk.nama_matakuliah', 'like', '%Tugas Akhir%')
+                                      ->orWhere('mk.nama_matakuliah', 'like', '%Laporan Tugas Akhir%');
+                                })
+                                ->select('pm.*', 'mk.sks_matakuliah')
+                                ->first();
+
+                            $id_matakuliah = null;
+                            $sks_matakuliah = 6;
+                            $tahun_kurikulum = null;
+                            $smt_matakuliah = 8;
+
+                            if ($penawaran_dasar) {
+                                $id_matakuliah = $penawaran_dasar->id_matakuliah;
+                                $sks_matakuliah = $penawaran_dasar->sks_matakuliah;
+                                $tahun_kurikulum = $penawaran_dasar->tahun_kurikulum;
+                                $smt_matakuliah = $penawaran_dasar->smt_matakuliah;
+                            } else {
+                                // Fallback: cari langsung ke akd_matakuliah
+                                $mk_db = DB::table('akd_matakuliah')
+                                    ->where('kode_program_studi', $kode_prodi)
+                                    ->where(function($q) {
+                                        $q->where('nama_matakuliah', 'like', '%Skripsi%')
+                                          ->orWhere('nama_matakuliah', 'like', '%Tugas Akhir%')
+                                          ->orWhere('nama_matakuliah', 'like', '%Laporan Tugas Akhir%');
+                                    })
+                                    ->first();
+                                if ($mk_db) {
+                                    $id_matakuliah = $mk_db->id_matakuliah;
+                                    $sks_matakuliah = $mk_db->sks_matakuliah;
+                                    $tahun_kurikulum = $mk_db->tahun_kurikulum;
+                                    $smt_matakuliah = $mk_db->smt_matakuliah;
+                                }
+                            }
+
+                            if ($id_matakuliah) {
+                                // Cari apakah kelas skripsi untuk dosen pembimbing 1 & 2 ini sudah ada
+                                $kelas_exist = DB::table('akd_kelas_kuliah as kk')
+                                    ->join('akd_penawaran_matakuliah as pm', 'kk.id_tawar', '=', 'pm.id_tawar')
+                                    ->where('pm.tahun', $ta)
+                                    ->where('pm.semester', $smt)
+                                    ->where('pm.kode_program_studi', $kode_prodi)
+                                    ->where('pm.id_matakuliah', $id_matakuliah)
+                                    ->where('kk.kode_dosen', $pembimbing1)
+                                    ->where(function($q) use ($pembimbing2) {
+                                        if ($pembimbing2) {
+                                            $q->where('kk.kode_dosen2', $pembimbing2);
+                                        } else {
+                                            $q->whereNull('kk.kode_dosen2')->orWhere('kk.kode_dosen2', '');
+                                        }
+                                    })
+                                    ->select('kk.id_kelas', 'kk.id_tawar')
+                                    ->first();
+
+                                if ($kelas_exist) {
+                                    $id_kelas = $kelas_exist->id_kelas;
+                                } else {
+                                    // Cari nama dosen pembimbing untuk penamaan kelas
+                                    $dosen1_row = DB::table('simpeg_pegawai')->where('id', $pembimbing1)->first();
+                                    $dosen1_name = $dosen1_row ? $dosen1_row->nama : 'Pembimbing';
+                                    $nama_kelas = 'Skripsi - ' . substr($dosen1_name, 0, 20);
+
+                                    // Insert penawaran matakuliah baru
+                                    $id_tawar_baru = DB::table('akd_penawaran_matakuliah')->insertGetId([
+                                        'tahun' => $ta,
+                                        'semester' => $smt,
+                                        'id_matakuliah' => $id_matakuliah,
+                                        'tahun_kurikulum' => $tahun_kurikulum ?? ($mhs ? $mhs->tahun_kurikulum : date('Y')),
+                                        'sks_matakuliah' => $sks_matakuliah,
+                                        'smt_matakuliah' => $smt_matakuliah,
+                                        'kode_program_studi' => $kode_prodi,
+                                        'kode_dosen' => $pembimbing1,
+                                        'kode_dosen2' => $pembimbing2
+                                    ]);
+
+                                    // Insert kelas kuliah baru
+                                    $id_kelas = DB::table('akd_kelas_kuliah')->insertGetId([
+                                        'id_tawar' => $id_tawar_baru,
+                                        'nama_kelas' => $nama_kelas,
+                                        'hari' => '-',
+                                        'jam_mulai' => '00:00:00',
+                                        'jam_selesai' => '00:00:00',
+                                        'kode_ruang' => '-',
+                                        'kapasitas_ruang' => 100,
+                                        'kode_dosen' => $pembimbing1,
+                                        'kode_dosen2' => $pembimbing2
+                                    ]);
+                                }
+
+                                // Cek apakah mahasiswa sudah terdaftar skripsi di akd_detail_krs
+                                $existing_detail = DB::table('akd_detail_krs as dk')
+                                    ->join('akd_kelas_kuliah as kk', 'dk.id_kelas', '=', 'kk.id_kelas')
+                                    ->join('akd_penawaran_matakuliah as pm', 'kk.id_tawar', '=', 'pm.id_tawar')
+                                    ->where('dk.id_krs', $id_krs)
+                                    ->where('pm.id_matakuliah', $id_matakuliah)
+                                    ->select('dk.id_detail_krs', 'dk.id_kelas')
+                                    ->first();
+
+                                $old_kelas_id = null;
+                                if ($existing_detail) {
+                                    $old_kelas_id = $existing_detail->id_kelas;
+                                    // Update ke kelas pembimbing baru
+                                    DB::table('akd_detail_krs')
+                                        ->where('id_detail_krs', $existing_detail->id_detail_krs)
+                                        ->update([
+                                            'id_kelas' => $id_kelas
+                                        ]);
+                                } else {
+                                    // Insert baru ke akd_detail_krs
+                                    DB::table('akd_detail_krs')->insert([
+                                        'id_krs' => $id_krs,
+                                        'id_kelas' => $id_kelas,
+                                        'dtime_krs' => date('Y-m-d H:i:s')
+                                    ]);
+                                }
+
+                                // Rekalkulasi SKS KRS
+                                $total_sks = DB::table('akd_detail_krs as dk')
+                                    ->join('akd_kelas_kuliah as kk', 'dk.id_kelas', '=', 'kk.id_kelas')
+                                    ->join('akd_penawaran_matakuliah as pm', 'kk.id_tawar', '=', 'pm.id_tawar')
+                                    ->join('akd_matakuliah as mk', 'pm.id_matakuliah', '=', 'mk.id_matakuliah')
+                                    ->where('dk.id_krs', $id_krs)
+                                    ->sum('mk.sks_matakuliah');
+
+                                DB::table('akd_krs')
+                                    ->where('id_krs', $id_krs)
+                                    ->update([
+                                        'sks_ambil' => $total_sks,
+                                        'sks_bayar' => $total_sks,
+                                        'waktu_krs' => date('Y-m-d H:i:s')
+                                    ]);
+
+                                // Update jumlah peserta kelas baru
+                                $jumlah_peserta_baru = DB::table('akd_detail_krs')
+                                    ->where('id_kelas', $id_kelas)
+                                    ->count();
+                                DB::table('akd_kelas_kuliah')
+                                    ->where('id_kelas', $id_kelas)
+                                    ->update(['jumlah_peserta' => $jumlah_peserta_baru]);
+
+                                // Update jumlah peserta kelas lama (jika berbeda)
+                                if ($old_kelas_id && $old_kelas_id != $id_kelas) {
+                                    $jumlah_peserta_lama = DB::table('akd_detail_krs')
+                                        ->where('id_kelas', $old_kelas_id)
+                                        ->count();
+                                    DB::table('akd_kelas_kuliah')
+                                        ->where('id_kelas', $old_kelas_id)
+                                        ->update(['jumlah_peserta' => $jumlah_peserta_lama]);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            DB::commit();
+            return response()->json(['success' => 'Ploting pembimbing berhasil disimpan, status skripsi diaktifkan, dan KRS mahasiswa disinkronkan.']);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => 'Gagal menyimpan ploting pembimbing: ' . $e->getMessage()], 500);
+        }
     }
 
     public function plot_jadwal_sempro(Request $request)

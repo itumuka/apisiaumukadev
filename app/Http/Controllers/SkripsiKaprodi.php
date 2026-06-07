@@ -1314,7 +1314,7 @@ class SkripsiKaprodi extends Controller
             ->leftJoin('akd_program_studi as p', 'm.kode_program_studi', '=', 'p.kode_program_studi')
             ->leftJoin('simpeg_pegawai as d', 's.id_dosen_pembimbing1', '=', 'd.id')
             ->select(
-                's.id', 's.nim', 'm.nama_mahasiswa', 'p.nama_program_studi as prodi',
+                's.id', 's.nim', 'm.nama_mahasiswa', 'p.nama_program_studi as prodi', 's.valid_id_kaprodi',
                 DB::raw("TRIM(CONCAT_WS(' ', d.gelar_depan, d.nama, d.gelar_belakang)) as pembimbing"),
                 DB::raw("(CASE WHEN s.fase_aktif = 'ujian' THEN 8 ELSE COALESCE(p.ta_minimal_bimbingan, 8) END) as min_bimbingan"),
                 DB::raw("(SELECT COUNT(*) FROM akd_skripsi_bimbingan b WHERE b.id_skripsi = s.id AND b.status = 'disetujui') as total_waiting_kaprodi"),
@@ -1347,19 +1347,42 @@ class SkripsiKaprodi extends Controller
             return response()->json(['error' => 'ID Log atau ID Skripsi harus diisi'], 400);
         }
 
-        $query = DB::table('akd_skripsi_bimbingan')->where('status', 'disetujui');
-        if ($id_log) {
-            $query->where('id', $id_log);
-        } else {
-            $query->where('id_skripsi', $id_skripsi);
+        DB::beginTransaction();
+        try {
+            $query = DB::table('akd_skripsi_bimbingan')->where('status', 'disetujui');
+            if ($id_log) {
+                $query->where('id', $id_log);
+                $log_row = DB::table('akd_skripsi_bimbingan')->where('id', $id_log)->first();
+                if ($log_row) {
+                    $id_skripsi = $log_row->id_skripsi;
+                }
+            } else {
+                $query->where('id_skripsi', $id_skripsi);
+            }
+
+            $affected = $query->update([
+                'status' => 'disetujui_kaprodi',
+                'updated_at' => now()
+            ]);
+
+            if ($id_skripsi) {
+                $skripsi = DB::table('akd_skripsi')->where('id', $id_skripsi)->first();
+                if ($skripsi && empty($skripsi->valid_id_kaprodi)) {
+                    DB::table('akd_skripsi')
+                        ->where('id', $id_skripsi)
+                        ->update([
+                            'valid_id_kaprodi' => uniqid('kaprodi_', true),
+                            'updated_at' => now()
+                        ]);
+                }
+            }
+
+            DB::commit();
+            return response()->json(['success' => "$affected Log bimbingan berhasil disetujui Kaprodi"]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => 'Gagal menyetujui bimbingan: ' . $e->getMessage()], 500);
         }
-
-        $affected = $query->update([
-            'status' => 'disetujui_kaprodi',
-            'updated_at' => now()
-        ]);
-
-        return response()->json(['success' => "$affected Log bimbingan berhasil disetujui Kaprodi"]);
     }
 }
 

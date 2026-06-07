@@ -65,13 +65,24 @@ class SkripsiDosen extends Controller
         if ($v->fails()) return response()->json(['error' => $v->errors()], 422);
 
         // Update Log
+        $updateData = [
+            'status' => $request->status,
+            'catatan_dosen' => $request->catatan_dosen,
+            'updated_at' => now()
+        ];
+
+        if ($request->status === 'disetujui') {
+            $existing = DB::table('akd_skripsi_bimbingan')->where('id', $request->id_log)->first();
+            if ($existing && empty($existing->valid_id)) {
+                $updateData['valid_id'] = uniqid('bimb_', true);
+            }
+        } else {
+            $updateData['valid_id'] = null;
+        }
+
         DB::table('akd_skripsi_bimbingan')
             ->where('id', $request->id_log)
-            ->update([
-                'status' => $request->status,
-                'catatan_dosen' => $request->catatan_dosen,
-                'updated_at' => now()
-            ]);
+            ->update($updateData);
 
         return response()->json(['success' => 'Status Bimbingan Berhasil Diperbarui']);
     }

@@ -23,6 +23,9 @@ Route::post("/auth-login", "Auth@auth")->name('auth_login');
 Route::get("/bearerToken", "Auth@bearerToken")->name('bearerToken');
 Route::get("/logout", "Auth@logout")->name('logout');
 Route::get("/check-session", "Mahasiswa@check_session")->name('check_session');
+Route::get('/debug-db-triggers', function() {
+    return response()->json(Illuminate\Support\Facades\DB::select("SHOW TRIGGERS"));
+});
 
 Route::get('/akademik/template-input-nilai-uts', 'Akademik@templatenilai_uts_export')->name('templatenilai_uts_export');
 Route::get('/akademik/template-input-nilai-uas', 'Akademik@templatenilai_uas_export')->name('templatenilai_uas_export');

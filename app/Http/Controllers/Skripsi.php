@@ -790,8 +790,11 @@ class Skripsi extends Controller
                     'b.id_dosen',
                     'b.valid_id'
                 )
-                ->where('b.id_skripsi', $skripsi->id)
-                ->whereIn('b.status', ['disetujui', 'disetujui_kaprodi'])
+                ->where(function($query) use ($skripsi, $nim) {
+                    $query->where('b.id_skripsi', $skripsi->id)
+                          ->orWhere('b.nim', $nim);
+                })
+                ->whereIn('b.status', ['disetujui', 'disetujui_kaprodi', 'disetujui_dekan'])
                 ->orderBy('b.tanggal', 'asc')
                 ->orderBy('b.id', 'asc')
                 ->get();

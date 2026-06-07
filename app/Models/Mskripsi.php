@@ -61,7 +61,7 @@ class Mskripsi extends Model
         if (in_array($fase, ['sempro', 'ujian']) && $prodiConfig) {
             $total_bimbingan_valid = DB::table('akd_skripsi_bimbingan')
                 ->where('nim', $nim)
-                ->whereIn('status', ['disetujui', 'revisi'])
+                ->whereIn('status', ['disetujui', 'disetujui_kaprodi', 'disetujui_dekan', 'revisi'])
                 ->count();
         }
         
@@ -339,7 +339,7 @@ class Mskripsi extends Model
                 else if ($rule->kode_syarat == 'BIMBINGAN_ACC') {
                     $bimbingan_valid = DB::table('akd_skripsi_bimbingan')
                         ->where('nim', $nim)
-                        ->whereIn('status', ['disetujui', 'revisi'])
+                        ->whereIn('status', ['disetujui', 'disetujui_kaprodi', 'disetujui_dekan', 'revisi'])
                         ->count();
                     $target_bimbingan = is_numeric($rule->nilai_target) ? (float)$rule->nilai_target : ($fase == 'ujian' ? 8 : (float) ($prodiConfig->ta_minimal_bimbingan ?? 0));
                     if ($target_bimbingan <= 0) {
@@ -352,7 +352,7 @@ class Mskripsi extends Model
                 else if ($rule->kode_syarat == 'BIMBINGAN_8X') {
                     $bimbingan_valid = DB::table('akd_skripsi_bimbingan')
                         ->where('nim', $nim)
-                        ->whereIn('status', ['disetujui', 'revisi'])
+                        ->whereIn('status', ['disetujui', 'disetujui_kaprodi', 'disetujui_dekan', 'revisi'])
                         ->count();
                     $isi_aktual = $bimbingan_valid . ' / 8 Log Bimbingan Tervalidasi (ACC/Revisi)';
                     $is_terpenuhi = $bimbingan_valid >= 8;
@@ -624,7 +624,7 @@ class Mskripsi extends Model
             }
         }
 
-        $total_bimbingan = $skripsi ? DB::table('akd_skripsi_bimbingan')->where('id_skripsi', $skripsi->id)->whereIn('status', ['disetujui', 'revisi'])->count() : 0;
+        $total_bimbingan = $skripsi ? DB::table('akd_skripsi_bimbingan')->where('id_skripsi', $skripsi->id)->whereIn('status', ['disetujui', 'disetujui_kaprodi', 'disetujui_dekan', 'revisi'])->count() : 0;
 
         // Ambil ujian dengan detail nama penguji (untuk card jadwal di dashboard)
         $ujian = null;
@@ -945,7 +945,7 @@ class Mskripsi extends Model
                 's.fase_aktif',
                 's.id_dosen_pembimbing1',
                 's.id_dosen_pembimbing2',
-                DB::raw("(SELECT COUNT(id) FROM akd_skripsi_bimbingan b WHERE b.id_skripsi = s.id AND b.status IN ('disetujui', 'revisi')) as total_bimbingan_acc")
+                DB::raw("(SELECT COUNT(id) FROM akd_skripsi_bimbingan b WHERE b.id_skripsi = s.id AND b.status IN ('disetujui', 'disetujui_kaprodi', 'disetujui_dekan', 'revisi')) as total_bimbingan_acc")
             )
             ->where(function ($query) use ($id_dosen) {
                 $query->where('s.id_dosen_pembimbing1', $id_dosen)

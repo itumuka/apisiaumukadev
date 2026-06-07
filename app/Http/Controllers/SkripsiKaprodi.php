@@ -1362,25 +1362,34 @@ class SkripsiKaprodi extends Controller
         return response()->json(['success' => "$affected Log bimbingan berhasil disetujui Kaprodi"]);
     }
 
-    /**
-     * Kaprodi: Reject bimbingan log (return for revision)
-     */
     public function reject_bimbingan_prodi(Request $request)
     {
         $v = Validator::make($request->all(), [
-            'id_log' => 'required|integer',
+            'id_log' => 'nullable|integer',
+            'id_skripsi' => 'nullable|integer',
             'catatan_dosen' => 'nullable|string'
         ]);
         if ($v->fails()) return response()->json(['error' => $v->errors()], 422);
 
-        $affected = DB::table('akd_skripsi_bimbingan')
-            ->where('id', $request->id_log)
-            ->where('status', 'disetujui')
-            ->update([
-                'status' => 'revisi_kaprodi',
-                'catatan_dosen' => $request->catatan_dosen,
-                'updated_at' => now()
-            ]);
+        $id_log = $request->id_log;
+        $id_skripsi = $request->id_skripsi;
+
+        if (!$id_log && !$id_skripsi) {
+            return response()->json(['error' => 'ID Log atau ID Skripsi harus diisi'], 400);
+        }
+
+        $query = DB::table('akd_skripsi_bimbingan')->where('status', 'disetujui');
+        if ($id_log) {
+            $query->where('id', $id_log);
+        } else {
+            $query->where('id_skripsi', $id_skripsi);
+        }
+
+        $affected = $query->update([
+            'status' => 'revisi_kaprodi',
+            'catatan_dosen' => $request->catatan_dosen,
+            'updated_at' => now()
+        ]);
 
         if ($affected) {
             return response()->json(['success' => 'Log bimbingan berhasil dikembalikan untuk revisi']);

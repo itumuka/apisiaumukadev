@@ -724,12 +724,44 @@ class Skripsi extends Controller
             ->select(
                 'm.nim', 'm.nama_mahasiswa', 'p.nama_program_studi', 'f.nama_fakultas',
                 DB::raw("TRIM(CONCAT_WS(' ', k.gelar_depan, k.nama, k.gelar_belakang)) as nama_kaprodi"),
-                'k.nidn as nidn_kaprodi'
+                'k.nidn as nidn_kaprodi',
+                'p.pimpinan_prodi'
             )
             ->where('m.nim', $nim)
             ->first();
 
         if (!$mhs) return response()->json(['error' => 'Data mahasiswa tidak ditemukan'], 404);
+
+        // Auto-generate/fetch QR for Kaprodi
+        if ($mhs && $mhs->pimpinan_prodi) {
+            $qk = DB::table('akd_qrcode_manajemen')->where('id_dosen', $mhs->pimpinan_prodi)->first();
+            if (!$qk) {
+                $valid_id = uniqid('kaprodi_', true);
+                $qrcode_file = $mhs->nidn_kaprodi . '.png';
+                DB::table('akd_qrcode_manajemen')->insert([
+                    'id_dosen' => $mhs->pimpinan_prodi,
+                    'valid_id' => $valid_id,
+                    'qrcode' => $qrcode_file,
+                    'jenis' => 'Prodi',
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+                $mhs->qrcode_kaprodi = $qrcode_file;
+                $mhs->valid_id_kaprodi = $valid_id;
+            } else {
+                if (empty($qk->valid_id)) {
+                    $valid_id = uniqid('kaprodi_', true);
+                    DB::table('akd_qrcode_manajemen')->where('id_dosen', $mhs->pimpinan_prodi)->update([
+                        'valid_id' => $valid_id,
+                        'updated_at' => now()
+                    ]);
+                    $mhs->valid_id_kaprodi = $valid_id;
+                } else {
+                    $mhs->valid_id_kaprodi = $qk->valid_id;
+                }
+                $mhs->qrcode_kaprodi = $qk->qrcode ?: ($mhs->nidn_kaprodi . '.png');
+            }
+        }
 
         // 2. Get skripsi details and pembimbing
         $skripsi = DB::table('akd_skripsi as s')
@@ -739,28 +771,114 @@ class Skripsi extends Controller
                 's.id', 's.judul', 's.judul_en',
                 DB::raw("TRIM(CONCAT_WS(' ', d1.gelar_depan, d1.nama, d1.gelar_belakang)) as nama_pembimbing1"),
                 'd1.nidn as nidn_pembimbing1',
+                's.id_dosen_pembimbing1',
                 DB::raw("TRIM(CONCAT_WS(' ', d2.gelar_depan, d2.nama, d2.gelar_belakang)) as nama_pembimbing2"),
-                'd2.nidn as nidn_pembimbing2'
+                'd2.nidn as nidn_pembimbing2',
+                's.id_dosen_pembimbing2'
             )
             ->where('s.nim', $nim)
             ->first();
 
+        if ($skripsi) {
+            // Auto-generate/fetch QR for Pembimbing 1
+            if ($skripsi->id_dosen_pembimbing1) {
+                $qd1 = DB::table('akd_qrcode')->where('id_dosen', $skripsi->id_dosen_pembimbing1)->first();
+                if (!$qd1) {
+                    $valid_id = uniqid('pemb1_', true);
+                    $qrcode_file = $skripsi->nidn_pembimbing1 . '.png';
+                    DB::table('akd_qrcode')->insert([
+                        'id_dosen' => $skripsi->id_dosen_pembimbing1,
+                        'valid_id' => $valid_id,
+                        'qrcode' => $qrcode_file,
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]);
+                    $skripsi->qrcode_pembimbing1 = $qrcode_file;
+                    $skripsi->valid_id_pembimbing1 = $valid_id;
+                } else {
+                    if (empty($qd1->valid_id)) {
+                        $valid_id = uniqid('pemb1_', true);
+                        DB::table('akd_qrcode')->where('id_dosen', $skripsi->id_dosen_pembimbing1)->update([
+                            'valid_id' => $valid_id,
+                            'updated_at' => now()
+                        ]);
+                        $skripsi->valid_id_pembimbing1 = $valid_id;
+                    } else {
+                        $skripsi->valid_id_pembimbing1 = $qd1->valid_id;
+                    }
+                    $skripsi->qrcode_pembimbing1 = $qd1->qrcode ?: ($skripsi->nidn_pembimbing1 . '.png');
+                }
+            }
+
+            // Auto-generate/fetch QR for Pembimbing 2
+            if ($skripsi->id_dosen_pembimbing2) {
+                $qd2 = DB::table('akd_qrcode')->where('id_dosen', $skripsi->id_dosen_pembimbing2)->first();
+                if (!$qd2) {
+                    $valid_id = uniqid('pemb2_', true);
+                    $qrcode_file = $skripsi->nidn_pembimbing2 . '.png';
+                    DB::table('akd_qrcode')->insert([
+                        'id_dosen' => $skripsi->id_dosen_pembimbing2,
+                        'valid_id' => $valid_id,
+                        'qrcode' => $qrcode_file,
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]);
+                    $skripsi->qrcode_pembimbing2 = $qrcode_file;
+                    $skripsi->valid_id_pembimbing2 = $valid_id;
+                } else {
+                    if (empty($qd2->valid_id)) {
+                        $valid_id = uniqid('pemb2_', true);
+                        DB::table('akd_qrcode')->where('id_dosen', $skripsi->id_dosen_pembimbing2)->update([
+                            'valid_id' => $valid_id,
+                            'updated_at' => now()
+                        ]);
+                        $skripsi->valid_id_pembimbing2 = $valid_id;
+                    } else {
+                        $skripsi->valid_id_pembimbing2 = $qd2->valid_id;
+                    }
+                    $skripsi->qrcode_pembimbing2 = $qd2->qrcode ?: ($skripsi->nidn_pembimbing2 . '.png');
+                }
+            }
+        }
+
         // 3. Get approved bimbingan logs (minimal approved by Dosen Pembimbing)
-        // Approved by Dosen means status is 'disetujui', 'disetujui_kaprodi', or 'disetujui_dekan'.
+        // Approved by Dosen means status is 'disetujui' or 'disetujui_kaprodi'.
         $logs = [];
         if ($skripsi) {
             $logs = DB::table('akd_skripsi_bimbingan as b')
                 ->leftJoin('simpeg_pegawai as d', 'b.id_dosen', '=', 'd.id')
+                ->leftJoin('akd_qrcode as q', 'd.id', '=', 'q.id_dosen')
                 ->select(
                     'b.id', 'b.tanggal', 'b.topik', 'b.uraian', 'b.status', 'b.catatan_dosen', 'b.created_at', 'b.updated_at',
                     DB::raw("TRIM(CONCAT_WS(' ', d.gelar_depan, d.nama, d.gelar_belakang)) as nama_dosen"),
-                    'd.nidn as nidn_dosen'
+                    'd.nidn as nidn_dosen',
+                    'b.id_dosen',
+                    'q.valid_id',
+                    'q.qrcode'
                 )
                 ->where('b.id_skripsi', $skripsi->id)
-                ->whereIn('b.status', ['disetujui', 'disetujui_kaprodi', 'disetujui_dekan'])
+                ->whereIn('b.status', ['disetujui', 'disetujui_kaprodi'])
                 ->orderBy('b.tanggal', 'asc')
                 ->orderBy('b.id', 'asc')
                 ->get();
+
+            // Auto-generate/fetch QR for each log's dosen if missing
+            foreach ($logs as $log) {
+                if (empty($log->valid_id) && $log->nidn_dosen) {
+                    $valid_id = uniqid('bimb_', true);
+                    $qrcode_file = $log->nidn_dosen . '.png';
+                    DB::table('akd_qrcode')->updateOrInsert(
+                        ['id_dosen' => $log->id_dosen],
+                        [
+                            'valid_id' => $valid_id,
+                            'qrcode' => $qrcode_file,
+                            'updated_at' => now()
+                        ]
+                    );
+                    $log->valid_id = $valid_id;
+                    $log->qrcode = $qrcode_file;
+                }
+            }
         }
 
         return response()->json([

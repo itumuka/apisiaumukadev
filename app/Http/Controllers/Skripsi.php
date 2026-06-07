@@ -811,12 +811,22 @@ class Skripsi extends Controller
             }
         }
 
+        // Debugging: get all raw logs regardless of status
+        $all_raw_logs = [];
+        if ($skripsi) {
+            $all_raw_logs = DB::table('akd_skripsi_bimbingan')
+                ->where('nim', $nim)
+                ->select('id', 'status', 'id_skripsi')
+                ->get();
+        }
+
         return response()->json([
             'status' => 'success',
             'data' => [
                 'mahasiswa' => $mhs,
                 'skripsi' => $skripsi,
-                'logs' => $logs
+                'logs' => $logs,
+                'debug_all_logs' => $all_raw_logs
             ]
         ]);
     }

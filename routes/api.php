@@ -465,4 +465,18 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::post("/dosen/skripsi/setuju-berita-acara", "SkripsiDosen@setuju_berita_acara")->name('skripsi_dosen_setuju_berita_acara');
     Route::get("/kaprodi/skripsi/penetapan-nilai", "SkripsiKaprodi@list_penetapan_nilai")->name('skripsi_kaprodi_list_penetapan_nilai');
     Route::post("/kaprodi/skripsi/tetapkan-nilai", "SkripsiKaprodi@tetapkan_nilai")->name('skripsi_kaprodi_tetapkan_nilai');
+
+    // API Cetak Data & Approval Bimbingan
+    Route::get("/akademik/skripsi/bimbingan/cetak-data", "Skripsi@get_cetak_bimbingan")->name('skripsi_cetak_bimbingan_data');
+
+    // API Kaprodi Bimbingan Approval
+    Route::get("/kaprodi/skripsi/bimbingan/list", "SkripsiKaprodi@list_bimbingan_prodi")->name('skripsi_kaprodi_list_bimbingan');
+    Route::post("/kaprodi/skripsi/bimbingan/approve", "SkripsiKaprodi@approve_bimbingan_prodi")->name('skripsi_kaprodi_approve_bimbingan');
+    Route::post("/kaprodi/skripsi/bimbingan/reject", "SkripsiKaprodi@reject_bimbingan_prodi")->name('skripsi_kaprodi_reject_bimbingan');
+
+    // API Dekan Bimbingan Approval
+    Route::get("/dekan/skripsi/bimbingan/list", "SkripsiDekan@list_bimbingan_fakultas")->name('skripsi_dekan_list_bimbingan');
+    Route::post("/dekan/skripsi/bimbingan/approve", "SkripsiDekan@approve_bimbingan_fakultas")->name('skripsi_dekan_approve_bimbingan');
+    Route::post("/dekan/skripsi/bimbingan/reject", "SkripsiDekan@reject_bimbingan_fakultas")->name('skripsi_dekan_reject_bimbingan');
 });
+

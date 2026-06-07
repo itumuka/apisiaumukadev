@@ -707,4 +707,69 @@ class Skripsi extends Controller
             ]
         ]);
     }
-}
+
+    /**
+     * Get data for printing guidance booklet
+     */
+    public function get_cetak_bimbingan(Request $request)
+    {
+        $nim = $request->nim;
+        if (!$nim) return response()->json(['error' => 'NIM diperlukan'], 400);
+
+        // 1. Get student profile, program study, faculty, and head of program study (Kaprodi)
+        $mhs = DB::table('akd_mahasiswa as m')
+            ->join('akd_program_studi as p', 'm.kode_program_studi', '=', 'p.kode_program_studi')
+            ->leftJoin('akd_fakultas as f', 'p.kode_fakultas', '=', 'f.kode_fakultas')
+            ->leftJoin('simpeg_pegawai as k', 'p.pimpinan_prodi', '=', 'k.id')
+            ->select(
+                'm.nim', 'm.nama_mahasiswa', 'p.nama_program_studi', 'f.nama_fakultas',
+                DB::raw("TRIM(CONCAT_WS(' ', k.gelar_depan, k.nama, k.gelar_belakang)) as nama_kaprodi"),
+                'k.nidn as nidn_kaprodi'
+            )
+            ->where('m.nim', $nim)
+            ->first();
+
+        if (!$mhs) return response()->json(['error' => 'Data mahasiswa tidak ditemukan'], 404);
+
+        // 2. Get skripsi details and pembimbing
+        $skripsi = DB::table('akd_skripsi as s')
+            ->leftJoin('simpeg_pegawai as d1', 's.id_dosen_pembimbing1', '=', 'd1.id')
+            ->leftJoin('simpeg_pegawai as d2', 's.id_dosen_pembimbing2', '=', 'd2.id')
+            ->select(
+                's.id', 's.judul', 's.judul_en',
+                DB::raw("TRIM(CONCAT_WS(' ', d1.gelar_depan, d1.nama, d1.gelar_belakang)) as nama_pembimbing1"),
+                'd1.nidn as nidn_pembimbing1',
+                DB::raw("TRIM(CONCAT_WS(' ', d2.gelar_depan, d2.nama, d2.gelar_belakang)) as nama_pembimbing2"),
+                'd2.nidn as nidn_pembimbing2'
+            )
+            ->where('s.nim', $nim)
+            ->first();
+
+        // 3. Get approved bimbingan logs (minimal approved by Dosen Pembimbing)
+        // Approved by Dosen means status is 'disetujui', 'disetujui_kaprodi', or 'disetujui_dekan'.
+        $logs = [];
+        if ($skripsi) {
+            $logs = DB::table('akd_skripsi_bimbingan as b')
+                ->leftJoin('simpeg_pegawai as d', 'b.id_dosen', '=', 'd.id')
+                ->select(
+                    'b.id', 'b.tanggal', 'b.topik', 'b.uraian', 'b.status', 'b.catatan_dosen', 'b.created_at', 'b.updated_at',
+                    DB::raw("TRIM(CONCAT_WS(' ', d.gelar_depan, d.nama, d.gelar_belakang)) as nama_dosen"),
+                    'd.nidn as nidn_dosen'
+                )
+                ->where('b.id_skripsi', $skripsi->id)
+                ->whereIn('b.status', ['disetujui', 'disetujui_kaprodi', 'disetujui_dekan'])
+                ->orderBy('b.tanggal', 'asc')
+                ->orderBy('b.id', 'asc')
+                ->get();
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'mahasiswa' => $mhs,
+                'skripsi' => $skripsi,
+                'logs' => $logs
+            ]
+        ]);
+    }
+}

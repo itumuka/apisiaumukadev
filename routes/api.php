@@ -344,6 +344,7 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::get("/akademik/select-semester", "Akademik@select_semester")->name('select_semester');
     Route::get("/akademik/select-makulprasyarat", "Akademik@select_makulprasyarat")->name('select_makulprasyarat');
     Route::post("/akademik/edit-transkipnilai", "Akademik@edit_transkipnilai")->name('edit_transkipnilai');
+    Route::post("/akademik/sinkron-transkrip", "Akademik@sinkron_transkrip")->name('sinkron_transkrip');
     Route::get("/akademik/ubahstatus-registrasi", "Akademik@ubahstatus_registrasi")->name('ubahstatus_registrasi');
     Route::get("/akademik/edittampilkurikulum", "Akademik@edittampilkurikulum")->name('akedittampilkurikulum');
     Route::get("/akademik/edittampiljenisher", "Akademik@edittampiljenisher")->name('akedittampiljenisher');

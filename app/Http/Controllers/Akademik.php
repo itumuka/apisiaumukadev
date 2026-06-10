@@ -388,80 +388,100 @@ class Akademik extends Controller
 	    public function sinkron_transkrip(Request $request)
     {
         $validation = Validator::make($request->all(), [
-            'nim' => 'required'
+            'nim' => 'nullable',
+            'kode_prodi' => 'nullable',
+            'tahun_angkatan' => 'nullable'
         ]);
 
         if ($validation->fails()) {
             return response()->json(['status' => 'error', 'message' => $validation->errors()->all()], 400);
         }
 
-        $nim = $request->nim;
+        $nims = [];
+        if ($request->nim) {
+            $nims = array_filter(explode('-', $request->nim));
+        } else if ($request->kode_prodi || $request->tahun_angkatan) {
+            $query = DB::table('akd_mahasiswa')->where('trash', 0);
+            if ($request->kode_prodi) {
+                $query->where('kode_program_studi', $request->kode_prodi);
+            }
+            if ($request->tahun_angkatan) {
+                $query->where('tahun_angkatan', $request->tahun_angkatan);
+            }
+            $nims = $query->pluck('nim')->toArray();
+        }
+
+        if (empty($nims)) {
+            return response()->json(['status' => 'error', 'message' => 'Parameter nim, kode_prodi, atau tahun_angkatan harus diisi.'], 400);
+        }
 
         try {
             DB::beginTransaction();
 
-            // 1. Ambil data nilai dari KRS beserta bobotnya (mutu) berdasarkan sistem penilaian mahasiswa
-            $allGrades = DB::table('akd_detail_krs as dk')
-                ->join('akd_kelas_kuliah as c', 'dk.id_kelas', '=', 'c.id_kelas')
-                ->join('akd_penawaran_matakuliah as p', 'c.id_tawar', '=', 'p.id_tawar')
-                ->join('akd_matakuliah as m', 'p.id_matakuliah', '=', 'm.id_matakuliah')
-                ->join('akd_krs as k', 'dk.id_krs', '=', 'k.id_krs')
-                ->join('akd_heregistrasi as h', 'k.id_heregistrasi', '=', 'h.id_heregistrasi')
-                ->join('akd_mahasiswa as mhs', 'h.nim', '=', 'mhs.nim')
-                ->join('akd_predikat_nilai_huruf as pre', function ($join) {
-                    $join->on('dk.nilai_akhir_huruf', '=', 'pre.nilai_huruf_akhir')
-                        ->on('mhs.kode_penilaian', '=', 'pre.kode_nilai');
-                })
-                ->where('h.nim', $nim)
-                ->whereNotNull('dk.nilai_akhir_huruf')
-                ->where('dk.nilai_akhir_huruf', '!=', '')
-                ->select(
-                    'h.nim',
-                    'p.id_matakuliah',
-                    'dk.nilai_akhir_huruf as nilai',
-                    'm.tahun_kurikulum',
-                    'mhs.kode_penilaian',
-                    DB::raw('CAST(pre.mutu AS DECIMAL(10,2)) as mutu')
-                )
-                ->orderBy('mutu', 'desc')
-                ->get();
+            foreach ($nims as $nim) {
+                // 1. Ambil data nilai dari KRS beserta bobotnya (mutu) berdasarkan sistem penilaian mahasiswa
+                $allGrades = DB::table('akd_detail_krs as dk')
+                    ->join('akd_kelas_kuliah as c', 'dk.id_kelas', '=', 'c.id_kelas')
+                    ->join('akd_penawaran_matakuliah as p', 'c.id_tawar', '=', 'p.id_tawar')
+                    ->join('akd_matakuliah as m', 'p.id_matakuliah', '=', 'm.id_matakuliah')
+                    ->join('akd_krs as k', 'dk.id_krs', '=', 'k.id_krs')
+                    ->join('akd_heregistrasi as h', 'k.id_heregistrasi', '=', 'h.id_heregistrasi')
+                    ->join('akd_mahasiswa as mhs', 'h.nim', '=', 'mhs.nim')
+                    ->join('akd_predikat_nilai_huruf as pre', function ($join) {
+                        $join->on('dk.nilai_akhir_huruf', '=', 'pre.nilai_huruf_akhir')
+                            ->on('mhs.kode_penilaian', '=', 'pre.kode_nilai');
+                    })
+                    ->where('h.nim', $nim)
+                    ->whereNotNull('dk.nilai_akhir_huruf')
+                    ->where('dk.nilai_akhir_huruf', '!=', '')
+                    ->select(
+                        'h.nim',
+                        'p.id_matakuliah',
+                        'dk.nilai_akhir_huruf as nilai',
+                        'm.tahun_kurikulum',
+                        'mhs.kode_penilaian',
+                        DB::raw('CAST(pre.mutu AS DECIMAL(10,2)) as mutu')
+                    )
+                    ->orderBy('mutu', 'desc')
+                    ->get();
 
-            // 2. Ambil nilai terbaik (mutu tertinggi) untuk setiap mata kuliah
-            $bestGrades = $allGrades->unique('id_matakuliah');
+                // 2. Ambil nilai terbaik (mutu tertinggi) untuk setiap mata kuliah
+                $bestGrades = $allGrades->unique('id_matakuliah');
 
-            foreach ($bestGrades as $row) {
-                // Check if already exists in transkrip
-                $existing = DB::table('akd_transkrip')
-                    ->where('nim', $row->nim)
-                    ->where('id_matakuliah', $row->id_matakuliah)
-                    ->first();
+                foreach ($bestGrades as $row) {
+                    // Check if already exists in transkrip
+                    $existing = DB::table('akd_transkrip')
+                        ->where('nim', $row->nim)
+                        ->where('id_matakuliah', $row->id_matakuliah)
+                        ->first();
 
-                if ($existing) {
-                    // Ambil bobot (mutu) nilai yang sudah ada di transkrip untuk perbandingan
-                    $existingMutu = DB::table('akd_predikat_nilai_huruf')
-                        ->where('nilai_huruf_akhir', $existing->nilai)
-                        ->where('kode_nilai', $row->kode_penilaian)
-                        ->value(DB::raw('CAST(mutu AS DECIMAL(10,2))')) ?? 0;
+                    if ($existing) {
+                        // Ambil bobot (mutu) nilai yang sudah ada di transkrip untuk perbandingan
+                        $existingMutu = DB::table('akd_predikat_nilai_huruf')
+                            ->where('nilai_huruf_akhir', $existing->nilai)
+                            ->where('kode_nilai', $row->kode_penilaian)
+                            ->value(DB::raw('CAST(mutu AS DECIMAL(10,2))')) ?? 0;
 
-                    // Update jika nilai dari KRS lebih baik (bobot mutu lebih tinggi)
-                    if ($row->mutu > $existingMutu) {
-                        DB::table('akd_transkrip')
-                            ->where('id_transkrip', $existing->id_transkrip)
-                            ->update([
-                                'nilai' => $row->nilai,
-                                'updated_at' => now()
-                            ]);
+                        // Update jika nilai dari KRS lebih baik (bobot mutu lebih tinggi)
+                        if ($row->mutu > $existingMutu) {
+                            DB::table('akd_transkrip')
+                                ->where('id_transkrip', $existing->id_transkrip)
+                                ->update([
+                                    'nilai' => $row->nilai,
+                                    'updated_at' => now()
+                                ]);
+                        }
+                    } else {
+                        // Insert new
+                        DB::table('akd_transkrip')->insert([
+                            'nim' => $row->nim,
+                            'id_matakuliah' => $row->id_matakuliah,
+                            'tahun_kurikulum' => $row->tahun_kurikulum,
+                            'nilai' => $row->nilai,
+                            'created_at' => now(),
+                            'updated_at' => now()
+                        ]);
                     }
-                } else {
-                    // Insert new
-                    DB::table('akd_transkrip')->insert([
-                        'nim' => $row->nim,
-                        'id_matakuliah' => $row->id_matakuliah,
-                        'tahun_kurikulum' => $row->tahun_kurikulum,
-                        'nilai' => $row->nilai,
-                        'created_at' => now(),
-                        'updated_at' => now()
-                    ]);
                 }
             }
 

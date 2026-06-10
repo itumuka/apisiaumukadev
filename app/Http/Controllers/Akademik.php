@@ -418,8 +418,17 @@ class Akademik extends Controller
         try {
             DB::beginTransaction();
 
-            foreach ($nims as $nim) {
-                // 1. Ambil data nilai dari KRS beserta bobotnya (mutu) berdasarkan sistem penilaian mahasiswa
+            $chunks = array_chunk($nims, 100);
+
+            // Fetch predikat nilai once and cache as dictionary
+            $allPredikat = DB::table('akd_predikat_nilai_huruf')->get();
+            $mutuDict = [];
+            foreach ($allPredikat as $p) {
+                $mutuDict[$p->kode_nilai][$p->nilai_huruf_akhir] = floatval($p->mutu);
+            }
+
+            foreach ($chunks as $chunk) {
+                // 1. Ambil data nilai dari KRS beserta bobotnya (mutu) untuk seluruh nim dalam chunk
                 $allGrades = DB::table('akd_detail_krs as dk')
                     ->join('akd_kelas_kuliah as c', 'dk.id_kelas', '=', 'c.id_kelas')
                     ->join('akd_penawaran_matakuliah as p', 'c.id_tawar', '=', 'p.id_tawar')
@@ -431,7 +440,7 @@ class Akademik extends Controller
                         $join->on('dk.nilai_akhir_huruf', '=', 'pre.nilai_huruf_akhir')
                             ->on('mhs.kode_penilaian', '=', 'pre.kode_nilai');
                     })
-                    ->where('h.nim', $nim)
+                    ->whereIn('h.nim', $chunk)
                     ->whereNotNull('dk.nilai_akhir_huruf')
                     ->where('dk.nilai_akhir_huruf', '!=', '')
                     ->select(
@@ -445,42 +454,43 @@ class Akademik extends Controller
                     ->orderBy('mutu', 'desc')
                     ->get();
 
-                // 2. Ambil nilai terbaik (mutu tertinggi) untuk setiap mata kuliah
-                $bestGrades = $allGrades->unique('id_matakuliah');
+                $groupedByNim = $allGrades->groupBy('nim');
 
-                foreach ($bestGrades as $row) {
-                    // Check if already exists in transkrip
-                    $existing = DB::table('akd_transkrip')
-                        ->where('nim', $row->nim)
-                        ->where('id_matakuliah', $row->id_matakuliah)
-                        ->first();
+                // 2. Ambil data transkrip yang sudah ada untuk chunk ini
+                $existingTranskrip = DB::table('akd_transkrip')
+                    ->whereIn('nim', $chunk)
+                    ->get()
+                    ->groupBy('nim');
 
-                    if ($existing) {
-                        // Ambil bobot (mutu) nilai yang sudah ada di transkrip untuk perbandingan
-                        $existingMutu = DB::table('akd_predikat_nilai_huruf')
-                            ->where('nilai_huruf_akhir', $existing->nilai)
-                            ->where('kode_nilai', $row->kode_penilaian)
-                            ->value(DB::raw('CAST(mutu AS DECIMAL(10,2))')) ?? 0;
+                foreach ($groupedByNim as $nim => $grades) {
+                    // Ambil nilai terbaik (mutu tertinggi) untuk setiap mata kuliah
+                    $bestGrades = $grades->unique('id_matakuliah');
+                    $studentExisting = $existingTranskrip->get($nim, collect([]))->keyBy('id_matakuliah');
 
-                        // Update jika nilai dari KRS lebih baik (bobot mutu lebih tinggi)
-                        if ($row->mutu > $existingMutu) {
-                            DB::table('akd_transkrip')
-                                ->where('id_transkrip', $existing->id_transkrip)
-                                ->update([
-                                    'nilai' => $row->nilai,
-                                    'updated_at' => now()
-                                ]);
+                    foreach ($bestGrades as $row) {
+                        $existing = $studentExisting->get($row->id_matakuliah);
+
+                        if ($existing) {
+                            $existingMutu = $mutuDict[$row->kode_penilaian][$existing->nilai] ?? 0;
+
+                            if ($row->mutu > $existingMutu) {
+                                DB::table('akd_transkrip')
+                                    ->where('id_transkrip', $existing->id_transkrip)
+                                    ->update([
+                                        'nilai' => $row->nilai,
+                                        'updated_at' => now()
+                                    ]);
+                            }
+                        } else {
+                            DB::table('akd_transkrip')->insert([
+                                'nim' => $row->nim,
+                                'id_matakuliah' => $row->id_matakuliah,
+                                'tahun_kurikulum' => $row->tahun_kurikulum,
+                                'nilai' => $row->nilai,
+                                'created_at' => now(),
+                                'updated_at' => now()
+                            ]);
                         }
-                    } else {
-                        // Insert new
-                        DB::table('akd_transkrip')->insert([
-                            'nim' => $row->nim,
-                            'id_matakuliah' => $row->id_matakuliah,
-                            'tahun_kurikulum' => $row->tahun_kurikulum,
-                            'nilai' => $row->nilai,
-                            'created_at' => now(),
-                            'updated_at' => now()
-                        ]);
                     }
                 }
             }

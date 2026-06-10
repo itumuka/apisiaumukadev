@@ -100,7 +100,21 @@ class Skripsi extends Controller
             if ($prodiConfig) {
                 $is_obe = isset($prodiConfig->ta_is_obe) ? $prodiConfig->ta_is_obe : 1;
                 if ($fase == 'ujian') {
-                    if (!empty($prodiConfig->ta_komponen_bayar_ujian)) {
+                    // Check if student has a dispensation for SKRIPSI
+                    $cekta = DB::table('akd_mreg')->where('trash', '1')->first();
+                    $hasDispensasi = false;
+                    if ($cekta) {
+                        $hasDispensasi = DB::table('akd_dispensasi')
+                            ->where('nim', $nim)
+                            ->where('tahun', $cekta->tahun)
+                            ->where('semester', $cekta->semester)
+                            ->where('jenis', 'SKRIPSI')
+                            ->exists();
+                    }
+
+                    if ($hasDispensasi) {
+                        $bayar_ujian = true;
+                    } else if (!empty($prodiConfig->ta_komponen_bayar_ujian)) {
                         $nama_biaya = $prodiConfig->ta_komponen_bayar_ujian;
                         $bayar_ujian = DB::table('keu_tagihan')
                             ->where('nim', $nim)

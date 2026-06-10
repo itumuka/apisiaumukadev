@@ -236,7 +236,18 @@ class Mskripsi extends Model
                     })
                     ->exists();
 
-                $bayar_ujian = $hasUjianScholarship || (DB::table('keu_tagihan')
+                $cekta = DB::table('akd_mreg')->where('trash', '1')->first();
+                $hasDispensasi = false;
+                if ($cekta) {
+                    $hasDispensasi = DB::table('akd_dispensasi')
+                        ->where('nim', $nim)
+                        ->where('tahun', $cekta->tahun)
+                        ->where('semester', $cekta->semester)
+                        ->where('jenis', 'SKRIPSI')
+                        ->exists();
+                }
+
+                $bayar_ujian = $hasDispensasi || $hasUjianScholarship || (DB::table('keu_tagihan')
                     ->where('nim', $nim)
                     ->where('nama_biaya', 'like', '%' . $prodiConfig->ta_komponen_bayar_ujian . '%')
                     ->where('status', '1')
@@ -248,7 +259,7 @@ class Mskripsi extends Model
                     'no' => $index++,
                     'id_syarat_prodi' => null,
                     'syarat' => 'Pembayaran Biaya Ujian Skripsi',
-                    'isi' => $bayar_ujian ? 'Sudah Lunas' : 'Belum Lunas',
+                    'isi' => $hasDispensasi ? 'Sudah Lunas (Dispensasi)' : ($bayar_ujian ? 'Sudah Lunas' : 'Belum Lunas'),
                     'hubungi' => 'Bagian Keuangan',
                     'status' => $bayar_ujian ? 'v' : 'x',
                     'jenis' => 'pembayaran',
@@ -437,12 +448,23 @@ class Mskripsi extends Model
                     })
                     ->exists();
 
-                $cek_tagihan = $hasScholarship || (DB::table('keu_tagihan')
+                $cekta = DB::table('akd_mreg')->where('trash', '1')->first();
+                $hasDispensasi = false;
+                if ($cekta) {
+                    $hasDispensasi = DB::table('akd_dispensasi')
+                        ->where('nim', $nim)
+                        ->where('tahun', $cekta->tahun)
+                        ->where('semester', $cekta->semester)
+                        ->where('jenis', 'SKRIPSI')
+                        ->exists();
+                }
+
+                $cek_tagihan = $hasDispensasi || $hasScholarship || (DB::table('keu_tagihan')
                     ->where('nim', $nim)
                     ->where('nama_biaya', 'like', '%' . $nama_biaya . '%')
                     ->where('status', '1')
                     ->count() > 0);
-                $isi_aktual = $cek_tagihan ? 'Sudah Lunas' : 'Belum Lunas';
+                $isi_aktual = $hasDispensasi ? 'Sudah Lunas (Dispensasi)' : ($cek_tagihan ? 'Sudah Lunas' : 'Belum Lunas');
                 $is_terpenuhi = $cek_tagihan;
                 $status_ikon = $is_terpenuhi ? 'v' : 'x';
             }
@@ -569,6 +591,17 @@ class Mskripsi extends Model
         // 2. Stats Akademik
         $stats = $this->getAcademicStats($nim);
 
+        $cekta = DB::table('akd_mreg')->where('trash', '1')->first();
+        $hasDispensasi = false;
+        if ($cekta) {
+            $hasDispensasi = DB::table('akd_dispensasi')
+                ->where('nim', $nim)
+                ->where('tahun', $cekta->tahun)
+                ->where('semester', $cekta->semester)
+                ->where('jenis', 'SKRIPSI')
+                ->exists();
+        }
+
         $hasFullScholarship = DB::table('keu_beasiswa_mahasiswa as bm')
             ->join('keu_sumber_beasiswa as s', 'bm.id_sumber_beasiswa', '=', 's.id_sumber_beasiswa')
             ->where('bm.nim', $nim)
@@ -589,7 +622,7 @@ class Mskripsi extends Model
             })
             ->exists();
 
-        $bayar_ta = $hasTaScholarship || (($mhs->ta_komponen_bayar) ? DB::table('keu_tagihan')
+        $bayar_ta = $hasDispensasi || $hasTaScholarship || (($mhs->ta_komponen_bayar) ? DB::table('keu_tagihan')
             ->where('nim', $nim)
             ->where('nama_biaya', 'like', '%' . $mhs->ta_komponen_bayar . '%')
             ->where('status', '1')
@@ -613,7 +646,7 @@ class Mskripsi extends Model
             })
             ->exists();
 
-        $bayar_ujian = $hasUjianScholarship || (($mhs->ta_komponen_bayar_ujian) ? DB::table('keu_tagihan')
+        $bayar_ujian = $hasDispensasi || $hasUjianScholarship || (($mhs->ta_komponen_bayar_ujian) ? DB::table('keu_tagihan')
             ->where('nim', $nim)
             ->where('nama_biaya', 'like', '%' . $mhs->ta_komponen_bayar_ujian . '%')
             ->where('status', '1')

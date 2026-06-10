@@ -452,7 +452,6 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::post("/kaprodi/skripsi/save-syarat-prodi", "SkripsiKaprodi@save_syarat_prodi")->name('skripsi_kaprodi_save_syarat');
     Route::delete("/kaprodi/skripsi/delete-syarat-prodi/{id}", "SkripsiKaprodi@delete_syarat_prodi")->name('skripsi_kaprodi_delete_syarat');
     Route::get("/akademik/skripsi/list-config-sempro", "SkripsiKaprodi@list_config_sempro")->name('skripsi_admin_list_config_sempro');
-    Route::post("/akademik/skripsi/validate-config-sempro", "SkripsiKaprodi@validate_config_sempro")->name('skripsi_admin_validate_config_sempro');
 
     // Modul Skripsi Dosen Pembimbing
     Route::get("/dosen/skripsi/dashboard", "SkripsiDosen@dashboard")->name('skripsi_dosen_dashboard');

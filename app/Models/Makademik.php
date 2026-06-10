@@ -2630,28 +2630,54 @@ TIME_FORMAT(jam_mulai, '%H:%i') AS jam_mulai, TIME_FORMAT(jam_selesai, '%H:%i') 
     // Transkip Nilai
     public function transkipnilai(Request $request)
     {
-        $thn = $request->tahunangkatan;
-        $prodiFilter = "";
+        $query = DB::table('akd_mahasiswa as m')
+            ->select(
+                'm.nim as nim',
+                'm.nama_mahasiswa as nama_mahasiswa',
+                'p.nama_program_pendidikan',
+                's.nama_program_studi'
+            )
+            ->join('akd_program_pendidikan as p', 'm.kode_program_pendidikan', '=', 'p.kode_program_pendidikan')
+            ->join('akd_program_studi as s', 'm.kode_program_studi', '=', 's.kode_program_studi')
+            ->where('m.tahun_angkatan', $request->tahunangkatan)
+            ->whereExists(function ($q) {
+                $q->select(DB::raw(1))
+                  ->from('akd_transkrip as t')
+                  ->whereColumn('t.nim', 'm.nim');
+            });
+
         if ($request->kode_prodi) {
-            $prodiFilter = " AND akd_mahasiswa.kode_program_studi = '" . $request->kode_prodi . "'";
+            $query->where('m.kode_program_studi', $request->kode_prodi);
         }
-        $transkipnilai = DB::select("SELECT * FROM (SELECT DISTINCT akd_transkrip.nim AS nim,akd_mahasiswa.nama_mahasiswa AS nama_mahasiswa,akd_program_pendidikan.nama_program_pendidikan,akd_program_studi.nama_program_studi 
-        FROM akd_mahasiswa,akd_transkrip,akd_program_pendidikan,akd_program_studi WHERE akd_mahasiswa.nim=akd_transkrip.nim AND akd_mahasiswa.tahun_angkatan='" . $thn . "'" . $prodiFilter . " 
-        AND akd_mahasiswa.kode_program_pendidikan=akd_program_pendidikan.kode_program_pendidikan AND akd_mahasiswa.kode_program_studi=akd_program_studi.kode_program_studi) AS nilaimahasiswa");
-        return $transkipnilai;
+
+        return $query->get()->toArray();
     }
     // Transkip Akademik
     public function transkipakademik(Request $request)
     {
-        $thn = $request->tahunangkatan;
-        $prodiFilter = "";
+        $query = DB::table('akd_mahasiswa as m')
+            ->select(
+                'm.nim as nm',
+                'm.nama_mahasiswa as namamhs',
+                'p.nama_program_pendidikan',
+                's.nama_program_studi',
+                'a.*'
+            )
+            ->join('akd_program_pendidikan as p', 'm.kode_program_pendidikan', '=', 'p.kode_program_pendidikan')
+            ->join('akd_program_studi as s', 'm.kode_program_studi', '=', 's.kode_program_studi')
+            ->leftJoin('akd_kelengkapan_transkrip as a', 'a.nim', '=', 'm.nim')
+            ->where('m.tahun_angkatan', $request->tahunangkatan)
+            ->whereExists(function ($q) {
+                $q->select(DB::raw(1))
+                  ->from('akd_transkrip as t')
+                  ->whereColumn('t.nim', 'm.nim');
+            });
+
         if ($request->kode_prodi) {
-            $prodiFilter = " and akd_mahasiswa.kode_program_studi = '" . $request->kode_prodi . "'";
+            $query->where('m.kode_program_studi', $request->kode_prodi);
         }
-        $transkipakademik = DB::select("select * from (select distinct akd_transkrip.nim as nm,akd_mahasiswa.nama_mahasiswa as namamhs,akd_program_pendidikan.nama_program_pendidikan,akd_program_studi.nama_program_studi from akd_mahasiswa,akd_transkrip,akd_program_pendidikan,akd_program_studi where akd_mahasiswa.nim=akd_transkrip.nim and akd_mahasiswa.tahun_angkatan='$thn'" . $prodiFilter . " 
-        and akd_mahasiswa.kode_program_pendidikan=akd_program_pendidikan.kode_program_pendidikan and akd_mahasiswa.kode_program_studi=akd_program_studi.kode_program_studi) as nilaimahasiswa LEFT JOIN akd_kelengkapan_transkrip a ON a.nim=nilaimahasiswa.nm
-        ");
-        return $transkipakademik;
+
+        return $query->get()->toArray();
     }
 
     public function cetaktranskipakademik(Request $request)

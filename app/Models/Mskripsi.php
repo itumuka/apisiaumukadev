@@ -278,7 +278,7 @@ class Mskripsi extends Model
                         ->where('kode_program_studi', $mhs->kode_program_studi)
                         ->select('ta_sempro_skema', 'ta_sempro_is_validated')
                         ->first();
-                    if ($prodiInfo && $prodiInfo->ta_sempro_skema === 'matakuliah' && $prodiInfo->ta_sempro_is_validated == 1) {
+                    if ($prodiInfo && $prodiInfo->ta_sempro_skema === 'matakuliah') {
                         $isSemproMatakuliah = true;
                     }
                 }
@@ -351,7 +351,7 @@ class Mskripsi extends Model
                         ->where('kode_program_studi', $mhs->kode_program_studi)
                         ->select('ta_sempro_skema', 'ta_sempro_is_validated')
                         ->first();
-                    if ($prodiInfo && $prodiInfo->ta_sempro_skema === 'matakuliah' && $prodiInfo->ta_sempro_is_validated == 1) {
+                    if ($prodiInfo && $prodiInfo->ta_sempro_skema === 'matakuliah') {
                         $isSemproMatakuliah = true;
                     }
 
@@ -666,7 +666,7 @@ class Mskripsi extends Model
         // 5. Data Sempro & Bimbingan
         $sempro = $skripsi ? DB::table('akd_skripsi_proposal')->where('id_skripsi', $skripsi->id)->where('nim', $nim)->orderBy('iterasi', 'desc')->first() : null;
 
-        $isSemproMatakuliah = $mhs && isset($mhs->ta_sempro_skema) && $mhs->ta_sempro_skema === 'matakuliah' && isset($mhs->ta_sempro_is_validated) && $mhs->ta_sempro_is_validated == 1;
+        $isSemproMatakuliah = $mhs && isset($mhs->ta_sempro_skema) && $mhs->ta_sempro_skema === 'matakuliah';
 
         if ($isSemproMatakuliah) {
             $hasPassedMk = $this->checkSemproByMataKuliahLulus($nim, $mhs->kode_program_studi);

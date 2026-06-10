@@ -188,10 +188,27 @@ class Skripsi extends Controller
 
         // Jika fase ujian, hubungkan ke akd_skripsi_ujian
         if ($request->fase == 'ujian') {
-            DB::table('akd_skripsi_ujian')->updateOrInsert(
-                ['id_skripsi' => $skripsi->id, 'nim' => $nim],
-                ['id_proposal' => $id_proposal, 'status' => 'pending', 'updated_at' => now()]
-            );
+            $ujianExist = DB::table('akd_skripsi_ujian')
+                ->where('id_skripsi', $skripsi->id)
+                ->where('nim', $nim)
+                ->first();
+            if (!$ujianExist) {
+                DB::table('akd_skripsi_ujian')->insert([
+                    'id_skripsi' => $skripsi->id,
+                    'nim' => $nim,
+                    'id_proposal' => $id_proposal,
+                    'status' => 'revisi',
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+            } else {
+                DB::table('akd_skripsi_ujian')
+                    ->where('id', $ujianExist->id)
+                    ->update([
+                        'id_proposal' => $id_proposal,
+                        'updated_at' => now()
+                    ]);
+            }
         }
 
         return response()->json(['success' => 'Naskah berhasil diunggah', 'id_proposal' => $id_proposal, 'iterasi' => $new_iterasi]);
@@ -609,31 +626,11 @@ class Skripsi extends Controller
             ->where('nim', $nim)
             ->first();
 
-        if (!$ujian) {
-            // Ambil proposal/naskah terakhir jika ada
-            $latestProposal = DB::table('akd_skripsi_proposal')
-                ->where('id_skripsi', $skripsi->id)
-                ->where('nim', $nim)
-                ->orderBy('iterasi', 'desc')
-                ->first();
-            
-            $id_proposal = $latestProposal ? $latestProposal->id : null;
-
-            // Inisialisasi otomatis pendaftaran ujian
-            $ujianId = DB::table('akd_skripsi_ujian')->insertGetId([
-                'id_skripsi' => $skripsi->id,
-                'nim' => $nim,
-                'id_proposal' => $id_proposal,
-                'status' => 'pending',
-                'created_at' => now(),
-                'updated_at' => now()
-            ]);
-
-            $ujian = DB::table('akd_skripsi_ujian')->where('id', $ujianId)->first();
-        }
-
-        if (in_array($ujian->status, ['diajukan', 'dijadwalkan', 'lulus'])) {
-            return response()->json(['error' => 'Pendaftaran ujian sudah diajukan sebelumnya.'], 409);
+        if (!$ujian || $ujian->status !== 'pending') {
+            if ($ujian && in_array($ujian->status, ['diajukan', 'dijadwalkan', 'lulus'])) {
+                return response()->json(['error' => 'Pendaftaran ujian sudah diajukan sebelumnya.'], 409);
+            }
+            return response()->json(['error' => 'Anda belum mendapatkan persetujuan (ACC Ujian) dari Dosen Pembimbing.'], 403);
         }
 
         // Update judul jika dikirimkan dari form pendaftaran ujian

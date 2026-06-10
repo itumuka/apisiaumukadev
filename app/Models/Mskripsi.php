@@ -195,6 +195,26 @@ class Mskripsi extends Model
                     'tipe_upload' => null,
                     'kode_syarat' => 'BIMBINGAN_8X'
                 ];
+
+                $ujian_acc = $skripsi ? DB::table('akd_skripsi_ujian')
+                    ->where('id_skripsi', $skripsi->id)
+                    ->where('nim', $nim)
+                    ->whereIn('status', ['pending', 'diajukan', 'dijadwalkan', 'dinilai', 'menunggu_penetapan', 'ditetapkan', 'lulus'])
+                    ->exists() : false;
+
+                $hasil[] = [
+                    'no' => $index++,
+                    'id_syarat_prodi' => null,
+                    'syarat' => 'Persetujuan Ujian dari Dosen Pembimbing (ACC Ujian)',
+                    'isi' => $ujian_acc ? 'Sudah Disetujui' : 'Belum Disetujui',
+                    'hubungi' => 'Dosen Pembimbing',
+                    'status' => $ujian_acc ? 'v' : 'x',
+                    'jenis' => 'sistem',
+                    'is_wajib' => 1,
+                    'tipe_upload' => null,
+                    'kode_syarat' => 'ACC_UJIAN'
+                ];
+                if (!$ujian_acc) $semua_lolos = false;
             }
             
             if ($fase == 'ujian' && $prodiConfig->ta_komponen_bayar_ujian) {
@@ -373,6 +393,15 @@ class Mskripsi extends Model
                     // ACC_SEMPRO requirement removed - always considered fulfilled
                     $isi_aktual = 'Tidak Perlu ACC';
                     $is_terpenuhi = true;
+                }
+                else if ($rule->kode_syarat == 'ACC_UJIAN') {
+                    $ujian_acc = $skripsi ? DB::table('akd_skripsi_ujian')
+                        ->where('id_skripsi', $skripsi->id)
+                        ->where('nim', $nim)
+                        ->whereIn('status', ['pending', 'diajukan', 'dijadwalkan', 'dinilai', 'menunggu_penetapan', 'ditetapkan', 'lulus'])
+                        ->exists() : false;
+                    $isi_aktual = $ujian_acc ? 'Sudah Disetujui' : 'Belum Disetujui';
+                    $is_terpenuhi = $ujian_acc;
                 }
 
                 $status_ikon = $is_terpenuhi ? 'v' : 'x';

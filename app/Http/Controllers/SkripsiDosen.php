@@ -133,33 +133,41 @@ class SkripsiDosen extends Controller
                 ]);
 
         } else if ($request->fase == 'ujian') {
-            // Update akd_skripsi_ujian
-            // Jika ACC=1, status menjadi 'pending' (siap untuk dijadwalkan)
-            // Jika ACC=0, status tetap atau direset
-            $newStatus = $status_acc ? 'pending' : 'pending';
-            
             // Check if ujian record exists
             $ujian = DB::table('akd_skripsi_ujian')
                 ->where('id_skripsi', $request->id_skripsi)
                 ->where('nim', $nim)
                 ->first();
             
-            if ($ujian) {
-                DB::table('akd_skripsi_ujian')
-                    ->where('id', $ujian->id)
-                    ->update([
+            if ($status_acc) {
+                // Berikan ACC Ujian
+                $newStatus = 'pending';
+                if ($ujian) {
+                    if (in_array($ujian->status, ['pending', 'revisi'])) {
+                        DB::table('akd_skripsi_ujian')
+                            ->where('id', $ujian->id)
+                            ->update([
+                                'status' => $newStatus,
+                                'updated_at' => now()
+                            ]);
+                    }
+                } else {
+                    DB::table('akd_skripsi_ujian')->insert([
+                        'nim' => $nim,
+                        'id_skripsi' => $request->id_skripsi,
                         'status' => $newStatus,
+                        'created_at' => now(),
                         'updated_at' => now()
                     ]);
+                }
             } else {
-                // Create new ujian record if not exists
-                DB::table('akd_skripsi_ujian')->insert([
-                    'nim' => $nim,
-                    'id_skripsi' => $request->id_skripsi,
-                    'status' => $newStatus,
-                    'created_at' => now(),
-                    'updated_at' => now()
-                ]);
+                // Cabut ACC Ujian
+                if ($ujian) {
+                    if (!in_array($ujian->status, ['pending', 'revisi'])) {
+                        return response()->json(['error' => 'Pendaftaran ujian sudah diajukan atau dijadwalkan, tidak dapat membatalkan persetujuan.'], 400);
+                    }
+                    DB::table('akd_skripsi_ujian')->where('id', $ujian->id)->delete();
+                }
             }
         }
 

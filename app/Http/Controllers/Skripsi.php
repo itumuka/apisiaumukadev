@@ -404,6 +404,96 @@ class Skripsi extends Controller
     }
 
     /**
+     * Update Log Bimbingan Mahasiswa (Hanya untuk status 'pending' atau 'revisi')
+     */
+    public function update_bimbingan(Request $request, $id)
+    {
+        $v = Validator::make($request->all(), [
+            'nim' => 'required',
+            'tanggal' => 'required|date',
+            'topik' => 'required',
+            'uraian' => 'required',
+            'file_lampiran' => 'nullable|mimes:pdf,doc,docx|max:5120' // Max 5MB
+        ]);
+
+        if ($v->fails()) return response()->json(['error' => $v->errors()], 422);
+
+        $nim = $request->nim;
+        $log = DB::table('akd_skripsi_bimbingan')->where('id', $id)->first();
+
+        if (!$log) {
+            return response()->json(['error' => 'Catatan bimbingan tidak ditemukan.'], 404);
+        }
+
+        if ($log->nim !== $nim) {
+            return response()->json(['error' => 'Anda tidak memiliki akses ke catatan bimbingan ini.'], 403);
+        }
+
+        if (!in_array($log->status, ['pending', 'revisi'])) {
+            return response()->json(['error' => 'Catatan bimbingan sudah disetujui, tidak dapat diubah.'], 403);
+        }
+
+        $data = [
+            'tanggal' => $request->tanggal,
+            'topik' => $request->topik,
+            'uraian' => $request->uraian,
+            'updated_at' => now()
+        ];
+
+        if ($request->hasFile('file_lampiran')) {
+            // Hapus file lama jika ada
+            if ($log->path_file && Storage::exists($log->path_file)) {
+                Storage::delete($log->path_file);
+            }
+
+            $file = $request->file('file_lampiran');
+            $nama_file = "BIMBINGAN_" . time() . "_" . $file->getClientOriginalName();
+            $path = $file->storeAs("public/skripsi_bimbingan/{$nim}", $nama_file);
+            $data['path_file'] = $path;
+        }
+
+        DB::table('akd_skripsi_bimbingan')->where('id', $id)->update($data);
+
+        return response()->json(['success' => 'Catatan bimbingan berhasil diperbarui.']);
+    }
+
+    /**
+     * Hapus Log Bimbingan Mahasiswa (Hanya untuk status 'pending' atau 'revisi')
+     */
+    public function hapus_bimbingan(Request $request, $id)
+    {
+        $v = Validator::make($request->all(), [
+            'nim' => 'required'
+        ]);
+
+        if ($v->fails()) return response()->json(['error' => $v->errors()], 422);
+
+        $nim = $request->nim;
+        $log = DB::table('akd_skripsi_bimbingan')->where('id', $id)->first();
+
+        if (!$log) {
+            return response()->json(['error' => 'Catatan bimbingan tidak ditemukan.'], 404);
+        }
+
+        if ($log->nim !== $nim) {
+            return response()->json(['error' => 'Anda tidak memiliki akses ke catatan bimbingan ini.'], 403);
+        }
+
+        if (!in_array($log->status, ['pending', 'revisi'])) {
+            return response()->json(['error' => 'Catatan bimbingan sudah disetujui, tidak dapat dihapus.'], 403);
+        }
+
+        // Hapus file lampiran jika ada
+        if ($log->path_file && Storage::exists($log->path_file)) {
+            Storage::delete($log->path_file);
+        }
+
+        DB::table('akd_skripsi_bimbingan')->where('id', $id)->delete();
+
+        return response()->json(['success' => 'Catatan bimbingan berhasil dihapus.']);
+    }
+
+    /**
      * Admin: Rekap Bimbingan per Mahasiswa
      */
     public function rekap_bimbingan(Request $request)

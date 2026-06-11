@@ -21,6 +21,7 @@ class Mskripsi extends Model
             ->where('nim', $nim)->first();
 
         $skripsi = DB::table('akd_skripsi')->where('nim', $nim)->first();
+        $is_obe = $skripsi && !empty($skripsi->target_luaran) && $skripsi->target_luaran !== 'buku_skripsi';
         $flag_pkkmb = 0;
         try {
             $flag_pkkmb = DB::table('akd_pkkmb')->where('nim', $nim)->where('status_lulus', 1)->count() > 0 ? 1 : 0;
@@ -199,7 +200,7 @@ class Mskripsi extends Model
                 $ujian_acc = $skripsi ? DB::table('akd_skripsi_ujian')
                     ->where('id_skripsi', $skripsi->id)
                     ->where('nim', $nim)
-                    ->whereIn('status', ['pending', 'diajukan', 'dijadwalkan', 'dinilai', 'menunggu_penetapan', 'ditetapkan', 'lulus'])
+                    ->whereIn('status', ['pending', 'diajukan', 'disetujui', 'dijadwalkan', 'dinilai', 'menunggu_penetapan', 'ditetapkan', 'lulus'])
                     ->exists() : false;
 
                 $hasil[] = [
@@ -253,7 +254,7 @@ class Mskripsi extends Model
                     ->where('status', '1')
                     ->count() > 0);
                 
-                if (!$bayar_ujian) $semua_lolos = false;
+                if (!$bayar_ujian && !$is_obe) $semua_lolos = false;
                 
                 $hasil[] = [
                     'no' => $index++,
@@ -409,7 +410,7 @@ class Mskripsi extends Model
                     $ujian_acc = $skripsi ? DB::table('akd_skripsi_ujian')
                         ->where('id_skripsi', $skripsi->id)
                         ->where('nim', $nim)
-                        ->whereIn('status', ['pending', 'diajukan', 'dijadwalkan', 'dinilai', 'menunggu_penetapan', 'ditetapkan', 'lulus'])
+                        ->whereIn('status', ['pending', 'diajukan', 'disetujui', 'dijadwalkan', 'dinilai', 'menunggu_penetapan', 'ditetapkan', 'lulus'])
                         ->exists() : false;
                     $isi_aktual = $ujian_acc ? 'Sudah Disetujui' : 'Belum Disetujui';
                     $is_terpenuhi = $ujian_acc;
@@ -486,7 +487,13 @@ class Mskripsi extends Model
                 }
             }
 
-            if (!$is_terpenuhi && $rule->is_wajib == 1) {
+            $isUjianPayment = $rule->kode_syarat === 'BAYAR_UJIAN' || 
+                              ($rule->jenis === 'pembayaran' && $rule->nama_syarat && 
+                               (strpos(strtolower($rule->nama_syarat), 'ujian') !== false || 
+                                strpos(strtolower($rule->nama_syarat), 'skripsi') !== false || 
+                                strpos(strtolower($rule->nama_syarat), 'tugas akhir') !== false));
+            
+            if (!$is_terpenuhi && $rule->is_wajib == 1 && !($isUjianPayment && $is_obe)) {
                 $semua_lolos = false;
             }
 
@@ -583,7 +590,7 @@ class Mskripsi extends Model
             ->select('m.nim', 'm.nama_mahasiswa', 'm.kode_program_studi', 'p.nama_program_studi', 'p.kode_jenjang_pendidikan',
                      'p.ta_sks_minimal', 'p.ta_ada_sempro', 'p.ta_minimal_bimbingan', 
                      'p.ta_komponen_bayar', 'p.ta_komponen_bayar_ujian', 'p.ta_nama_tugas_akhir',
-                     'p.ta_sempro_skema', 'p.ta_sempro_is_validated')
+                     'p.ta_sempro_skema', 'p.ta_sempro_is_validated', 'p.ta_is_obe')
             ->where('m.nim', $nim)->first();
 
         if (!$mhs) return ['error' => 'Data Mahasiswa atau Program Studi tidak sinkron.'];
@@ -820,14 +827,16 @@ class Mskripsi extends Model
         }
 
         // Jika ujian sudah ada (dalam tahap apapun) -> jangan tampilkan CTA bayar ujian lagi
-        $ujian_sudah_ada = $ujian && in_array($ujian->status, ['pending', 'diajukan', 'dijadwalkan', 'dinilai', 'menunggu_penetapan', 'ditetapkan', 'lulus', 'tidak_lulus']);
+        $ujian_sudah_ada = $ujian && in_array($ujian->status, ['pending', 'diajukan', 'disetujui', 'dijadwalkan', 'dinilai', 'menunggu_penetapan', 'ditetapkan', 'lulus', 'tidak_lulus']);
 
-        if (!$ujian_sudah_ada && $total_bimbingan >= $min_bimbingan_ujian && !$bayar_ujian) {
-            return ['label' => 'Bimbingan Selesai! Lunasi Biaya Ujian', 'url' => 'mahasiswa/statuspembayaran', 'warna' => 'warning', 'disabled' => false];
-        }
+        $is_obe = ($skripsi && isset($skripsi->is_obe) && $skripsi->is_obe == 1) || (isset($mhs->ta_is_obe) && $mhs->ta_is_obe == 1);
 
-        if (!$ujian_sudah_ada && $total_bimbingan >= $min_bimbingan_ujian && $bayar_ujian) {
-            return ['label' => 'Daftar Ujian Sidang Akhir', 'url' => 'mahasiswa/skripsi/ujian', 'warna' => 'warning', 'disabled' => false];
+        if (!$ujian_sudah_ada && $total_bimbingan >= $min_bimbingan_ujian) {
+            if ($is_obe || $bayar_ujian) {
+                return ['label' => 'Daftar Ujian Sidang Akhir', 'url' => 'mahasiswa/skripsi/ujian', 'warna' => 'warning', 'disabled' => false];
+            } else {
+                return ['label' => 'Bimbingan Selesai! Lunasi Biaya Ujian', 'url' => 'mahasiswa/statuspembayaran', 'warna' => 'warning', 'disabled' => false];
+            }
         }
 
         // Ujian sudah ada dengan status pending -> arahkan ke form ujian untuk finalisasi
@@ -840,7 +849,7 @@ class Mskripsi extends Model
             return ['label' => 'Pendaftaran Ujian Terkirim – Menunggu Penjadwalan Kaprodi', 'url' => '#', 'warna' => 'info', 'disabled' => true];
         }
 
-        if ($ujian && $ujian->status == 'dijadwalkan') {
+        if ($ujian && in_array($ujian->status, ['disetujui', 'dijadwalkan'])) {
             $today = date('Y-m-d');
             $tgl_ujian = $ujian->tanggal_ujian;
 

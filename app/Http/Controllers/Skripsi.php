@@ -558,11 +558,30 @@ class Skripsi extends Controller
 
         $luaran = DB::table('akd_skripsi_luaran')->where('id_skripsi', $skripsi->id)->first();
         
+        $ujian = DB::table('akd_skripsi_ujian')->where('id_skripsi', $skripsi->id)->first();
+        $ujian_locked = false;
+        $notice_message = null;
+
+        if ($ujian) {
+            if (in_array($ujian->status, ['diajukan', 'disetujui', 'dijadwalkan', 'dinilai', 'menunggu_penetapan', 'ditetapkan', 'lulus', 'tidak_lulus'])) {
+                $ujian_locked = true;
+                if ($ujian->status == 'diajukan') {
+                    $notice_message = 'Pendaftaran Ujian Terkirim – Menunggu Penjadwalan Kaprodi.';
+                } else if (in_array($ujian->status, ['disetujui', 'dijadwalkan'])) {
+                    $notice_message = 'Pendaftaran Ujian Telah Disetujui & Dijadwalkan oleh Kaprodi.';
+                } else {
+                    $notice_message = 'Ujian Anda telah selesai dilaksanakan.';
+                }
+            }
+        }
+
         return response()->json([
             'status' => 'success',
             'data' => [
                 'target_luaran' => $skripsi->target_luaran,
-                'luaran' => $luaran
+                'luaran' => $luaran,
+                'ujian_locked' => $ujian_locked,
+                'notice_message' => $notice_message
             ]
         ]);
     }

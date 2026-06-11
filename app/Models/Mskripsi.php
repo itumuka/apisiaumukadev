@@ -819,12 +819,25 @@ class Mskripsi extends Model
             return ['label' => 'Menunggu Jadwal & Validasi Sempro', 'url' => '#', 'warna' => 'secondary', 'disabled' => true];
         }
 
-        if ($total_bimbingan >= $min_bimbingan_ujian && !$bayar_ujian) {
+        // Jika ujian sudah ada (dalam tahap apapun) -> jangan tampilkan CTA bayar ujian lagi
+        $ujian_sudah_ada = $ujian && in_array($ujian->status, ['pending', 'diajukan', 'dijadwalkan', 'dinilai', 'menunggu_penetapan', 'ditetapkan', 'lulus', 'tidak_lulus']);
+
+        if (!$ujian_sudah_ada && $total_bimbingan >= $min_bimbingan_ujian && !$bayar_ujian) {
             return ['label' => 'Bimbingan Selesai! Lunasi Biaya Ujian', 'url' => 'mahasiswa/statuspembayaran', 'warna' => 'warning', 'disabled' => false];
         }
 
-        if ($total_bimbingan >= $min_bimbingan_ujian && $bayar_ujian && (!$ujian || $ujian->status == 'pending')) {
+        if (!$ujian_sudah_ada && $total_bimbingan >= $min_bimbingan_ujian && $bayar_ujian) {
             return ['label' => 'Daftar Ujian Sidang Akhir', 'url' => 'mahasiswa/skripsi/ujian', 'warna' => 'warning', 'disabled' => false];
+        }
+
+        // Ujian sudah ada dengan status pending -> arahkan ke form ujian untuk finalisasi
+        if ($ujian && $ujian->status == 'pending') {
+            return ['label' => 'ACC Dosen Diterima! Selesaikan Pendaftaran Ujian', 'url' => 'mahasiswa/skripsi/ujian', 'warna' => 'warning', 'disabled' => false];
+        }
+
+        // Sudah diajukan, menunggu validasi / penjadwalan kaprodi
+        if ($ujian && $ujian->status == 'diajukan') {
+            return ['label' => 'Pendaftaran Ujian Terkirim – Menunggu Penjadwalan Kaprodi', 'url' => '#', 'warna' => 'info', 'disabled' => true];
         }
 
         if ($ujian && $ujian->status == 'dijadwalkan') {

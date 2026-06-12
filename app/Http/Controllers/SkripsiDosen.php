@@ -203,6 +203,8 @@ class SkripsiDosen extends Controller
                 DB::raw("CASE WHEN s.target_luaran IS NOT NULL AND s.target_luaran != 'buku_skripsi' THEN 1 ELSE 0 END as is_obe"),
                 DB::raw("CASE 
                     WHEN s.target_luaran IS NOT NULL AND s.target_luaran != 'buku_skripsi' THEN 1 
+                    WHEN (SELECT COUNT(id) FROM akd_skripsi_nilai_cpmk WHERE id_skripsi_ujian = u.id AND id_cpmk > 0) > 0 THEN 1
+                    WHEN (SELECT COUNT(id) FROM akd_skripsi_nilai_cpmk WHERE id_skripsi_ujian = u.id AND id_cpmk = 0) > 0 THEN 0
                     ELSE COALESCE(
                         (SELECT mk.cpmk_based 
                          FROM akd_detail_krs dk
@@ -348,37 +350,53 @@ class SkripsiDosen extends Controller
         if ($skripsi && !empty($skripsi->target_luaran) && $skripsi->target_luaran !== 'buku_skripsi') {
             $is_cpmk_based = true;
         } else {
-            $mhs_mk = DB::table('akd_detail_krs as dk')
-                ->join('akd_kelas_kuliah as kk', 'dk.id_kelas', '=', 'kk.id_kelas')
-                ->join('akd_penawaran_matakuliah as pm', 'kk.id_tawar', '=', 'pm.id_tawar')
-                ->join('akd_matakuliah as mk', 'pm.id_matakuliah', '=', 'mk.id_matakuliah')
-                ->join('akd_krs as k', 'dk.id_krs', '=', 'k.id_krs')
-                ->join('akd_heregistrasi as h', 'k.id_heregistrasi', '=', 'h.id_heregistrasi')
-                ->where('h.nim', $ujian->nim)
-                ->where(function($q) {
-                    $q->where('mk.nama_matakuliah', 'like', '%Skripsi%')
-                      ->orWhere('mk.nama_matakuliah', 'like', '%Tugas Akhir%')
-                      ->orWhere('mk.nama_matakuliah', 'like', '%Laporan Tugas Akhir%');
-                })
-                ->where('mk.nama_matakuliah', 'not like', '%proposal%')
-                ->select('mk.cpmk_based')
-                ->first();
+            // Check if there are already CPMK grades or direct grades saved for this exam
+            $has_cpmk_grades = DB::table('akd_skripsi_nilai_cpmk')
+                ->where('id_skripsi_ujian', $id_skripsi_ujian)
+                ->where('id_cpmk', '>', 0)
+                ->exists();
+            $has_direct_grades = DB::table('akd_skripsi_nilai_cpmk')
+                ->where('id_skripsi_ujian', $id_skripsi_ujian)
+                ->where('id_cpmk', 0)
+                ->exists();
 
-            if (!$mhs_mk && $kode_prodi) {
-                $mhs_mk = DB::table('akd_matakuliah')
-                    ->where('kode_program_studi', $kode_prodi)
+            if ($has_cpmk_grades) {
+                $is_cpmk_based = true;
+            } elseif ($has_direct_grades) {
+                $is_cpmk_based = false;
+            } else {
+                $mhs_mk = DB::table('akd_detail_krs as dk')
+                    ->join('akd_kelas_kuliah as kk', 'dk.id_kelas', '=', 'kk.id_kelas')
+                    ->join('akd_penawaran_matakuliah as pm', 'kk.id_tawar', '=', 'pm.id_tawar')
+                    ->join('akd_matakuliah as mk', 'pm.id_matakuliah', '=', 'mk.id_matakuliah')
+                    ->join('akd_krs as k', 'dk.id_krs', '=', 'k.id_krs')
+                    ->join('akd_heregistrasi as h', 'k.id_heregistrasi', '=', 'h.id_heregistrasi')
+                    ->where('h.nim', $ujian->nim)
                     ->where(function($q) {
-                        $q->where('nama_matakuliah', 'like', '%Skripsi%')
-                          ->orWhere('nama_matakuliah', 'like', '%Tugas Akhir%')
-                          ->orWhere('nama_matakuliah', 'like', '%Laporan Tugas Akhir%');
+                        $q->where('mk.nama_matakuliah', 'like', '%Skripsi%')
+                          ->orWhere('mk.nama_matakuliah', 'like', '%Tugas Akhir%')
+                          ->orWhere('mk.nama_matakuliah', 'like', '%Laporan Tugas Akhir%');
                     })
-                    ->where('nama_matakuliah', 'not like', '%proposal%')
-                    ->select('cpmk_based')
+                    ->where('mk.nama_matakuliah', 'not like', '%proposal%')
+                    ->select('mk.cpmk_based')
                     ->first();
-            }
 
-            if ($mhs_mk) {
-                $is_cpmk_based = $mhs_mk->cpmk_based == 1;
+                if (!$mhs_mk && $kode_prodi) {
+                    $mhs_mk = DB::table('akd_matakuliah')
+                        ->where('kode_program_studi', $kode_prodi)
+                        ->where(function($q) {
+                            $q->where('nama_matakuliah', 'like', '%Skripsi%')
+                              ->orWhere('nama_matakuliah', 'like', '%Tugas Akhir%')
+                              ->orWhere('nama_matakuliah', 'like', '%Laporan Tugas Akhir%');
+                        })
+                        ->where('nama_matakuliah', 'not like', '%proposal%')
+                        ->select('cpmk_based')
+                        ->first();
+                }
+
+                if ($mhs_mk) {
+                    $is_cpmk_based = $mhs_mk->cpmk_based == 1;
+                }
             }
         }
 

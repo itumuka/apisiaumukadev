@@ -642,6 +642,55 @@ class SkripsiKaprodi extends Controller
     }
 
     /**
+     * Kaprodi: Ambil daftar matakuliah skripsi beserta konfigurasi is_obe
+     */
+    public function get_grading_config($kode_prodi)
+    {
+        $matakuliah = DB::table('akd_matakuliah')
+            ->where('kode_program_studi', $kode_prodi)
+            ->where(function($q) {
+                $q->where('nama_matakuliah', 'like', '%Skripsi%')
+                  ->orWhere('nama_matakuliah', 'like', '%Tugas Akhir%')
+                  ->orWhere('nama_matakuliah', 'like', '%Laporan Tugas Akhir%')
+                  ->orWhere('nama_matakuliah', 'like', '%Seminar Proposal%')
+                  ->orWhere('nama_matakuliah', 'like', '%PKL%')
+                  ->orWhere('nama_matakuliah', 'like', '%Praktek Kerja%');
+            })
+            ->select('id_matakuliah', 'kode_matakuliah', 'nama_matakuliah', 'is_obe')
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $matakuliah
+        ]);
+    }
+
+    /**
+     * Kaprodi: Simpan konfigurasi grading is_obe untuk matakuliah
+     */
+    public function update_grading_config(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'id_matakuliah' => 'required',
+            'is_obe'        => 'required|in:0,1'
+        ]);
+
+        if ($v->fails()) return response()->json(['error' => $v->errors()->all()], 422);
+
+        DB::table('akd_matakuliah')
+            ->where('id_matakuliah', $request->id_matakuliah)
+            ->update([
+                'is_obe' => $request->is_obe,
+                'dtime_update' => date('Y-m-d H:i:s')
+            ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Metode penilaian mata kuliah berhasil diperbarui'
+        ]);
+    }
+
+    /**
      * Konfigurasi Sempro Per Prodi
      */
     public function get_config_sempro($kode_prodi)

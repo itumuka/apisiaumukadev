@@ -437,6 +437,8 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::post("/kaprodi/skripsi/update-sk", "SkripsiKaprodi@update_sk")->name('skripsi_update_sk');
 
     // Konfigurasi Sempro & CPMK Rubrik
+    Route::get("/kaprodi/skripsi/config-grading/{kode_prodi}", "SkripsiKaprodi@get_grading_config")->name('skripsi_kaprodi_get_config_grading');
+    Route::post("/kaprodi/skripsi/update-config-grading", "SkripsiKaprodi@update_grading_config")->name('skripsi_kaprodi_update_config_grading');
     Route::get("/kaprodi/skripsi/config-sempro/{kode_prodi}", "SkripsiKaprodi@get_config_sempro")->name('skripsi_kaprodi_get_config_sempro');
     Route::post("/kaprodi/skripsi/update-config-sempro", "SkripsiKaprodi@update_config_sempro")->name('skripsi_kaprodi_update_config_sempro');
     Route::get("/kaprodi/skripsi/get-rubrik-cpmk/{kode_prodi}", "SkripsiKaprodi@get_rubrik_cpmk")->name('skripsi_kaprodi_get_rubrik_cpmk');

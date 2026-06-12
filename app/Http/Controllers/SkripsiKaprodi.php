@@ -680,8 +680,7 @@ class SkripsiKaprodi extends Controller
         DB::table('akd_matakuliah')
             ->where('id_matakuliah', $request->id_matakuliah)
             ->update([
-                'cpmk_based' => $request->cpmk_based,
-                'dtime_update' => date('Y-m-d H:i:s')
+                'cpmk_based' => $request->cpmk_based
             ]);
 
         return response()->json([

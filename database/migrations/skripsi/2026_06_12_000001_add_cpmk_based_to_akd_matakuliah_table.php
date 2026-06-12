@@ -3,7 +3,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-class AddIsObeToAkdMatakuliahTable extends Migration
+class AddCpmkBasedToAkdMatakuliahTable extends Migration
 {
     /**
      * Run the migrations.
@@ -13,8 +13,8 @@ class AddIsObeToAkdMatakuliahTable extends Migration
     public function up()
     {
         Schema::table('akd_matakuliah', function (Blueprint $table) {
-            if (!Schema::hasColumn('akd_matakuliah', 'is_obe')) {
-                $table->tinyInteger('is_obe')->default(1)->comment('1=OBE (CPMK), 0=Non-OBE (Direct Score)')->after('kode_bayar');
+            if (!Schema::hasColumn('akd_matakuliah', 'cpmk_based')) {
+                $table->tinyInteger('cpmk_based')->default(1)->comment('1=CPMK-Based (OBE), 0=Non-CPMK-Based (Direct Score)')->after('kode_bayar');
             }
         });
     }
@@ -27,8 +27,8 @@ class AddIsObeToAkdMatakuliahTable extends Migration
     public function down()
     {
         Schema::table('akd_matakuliah', function (Blueprint $table) {
-            if (Schema::hasColumn('akd_matakuliah', 'is_obe')) {
-                $table->dropColumn('is_obe');
+            if (Schema::hasColumn('akd_matakuliah', 'cpmk_based')) {
+                $table->dropColumn('cpmk_based');
             }
         });
     }

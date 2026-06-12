@@ -30,7 +30,7 @@ class SkripsiKaprodi extends Controller
                 's.judul',
                 's.topik',
                 's.status',
-                DB::raw("CASE WHEN s.target_luaran IS NOT NULL AND s.target_luaran != 'buku_skripsi' THEN 1 ELSE 0 END as is_obe"),
+                DB::raw("CASE WHEN s.target_luaran IS NOT NULL AND s.target_luaran != 'buku_skripsi' THEN 1 ELSE 0 END as cpmk_based"),
                 DB::raw("CONCAT_WS(' ', p1.gelar_depan, p1.nama, p1.gelar_belakang) as nama_pembimbing1"),
                 DB::raw("CONCAT_WS(' ', p2.gelar_depan, p2.nama, p2.gelar_belakang) as nama_pembimbing2"),
                 's.id_dosen_pembimbing1',
@@ -642,7 +642,7 @@ class SkripsiKaprodi extends Controller
     }
 
     /**
-     * Kaprodi: Ambil daftar matakuliah skripsi beserta konfigurasi is_obe
+     * Kaprodi: Ambil daftar matakuliah skripsi beserta konfigurasi cpmk_based
      */
     public function get_grading_config($kode_prodi)
     {
@@ -656,7 +656,7 @@ class SkripsiKaprodi extends Controller
                   ->orWhere('nama_matakuliah', 'like', '%PKL%')
                   ->orWhere('nama_matakuliah', 'like', '%Praktek Kerja%');
             })
-            ->select('id_matakuliah', 'kode_matakuliah', 'nama_matakuliah', 'is_obe')
+            ->select('id_matakuliah', 'kode_matakuliah', 'nama_matakuliah', 'cpmk_based')
             ->get();
 
         return response()->json([
@@ -666,13 +666,13 @@ class SkripsiKaprodi extends Controller
     }
 
     /**
-     * Kaprodi: Simpan konfigurasi grading is_obe untuk matakuliah
+     * Kaprodi: Simpan konfigurasi grading cpmk_based untuk matakuliah
      */
     public function update_grading_config(Request $request)
     {
         $v = Validator::make($request->all(), [
             'id_matakuliah' => 'required',
-            'is_obe'        => 'required|in:0,1'
+            'cpmk_based'    => 'required|in:0,1'
         ]);
 
         if ($v->fails()) return response()->json(['error' => $v->errors()->all()], 422);
@@ -680,7 +680,7 @@ class SkripsiKaprodi extends Controller
         DB::table('akd_matakuliah')
             ->where('id_matakuliah', $request->id_matakuliah)
             ->update([
-                'is_obe' => $request->is_obe,
+                'cpmk_based' => $request->cpmk_based,
                 'dtime_update' => date('Y-m-d H:i:s')
             ]);
 

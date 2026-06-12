@@ -203,7 +203,7 @@ class SkripsiDosen extends Controller
                 DB::raw("CASE 
                     WHEN s.target_luaran IS NOT NULL AND s.target_luaran != 'buku_skripsi' THEN 1 
                     ELSE COALESCE(
-                        (SELECT mk.is_obe 
+                        (SELECT mk.cpmk_based 
                          FROM akd_detail_krs dk
                          JOIN akd_kelas_kuliah kk ON dk.id_kelas = kk.id_kelas
                          JOIN akd_penawaran_matakuliah pm ON kk.id_tawar = pm.id_tawar
@@ -215,7 +215,7 @@ class SkripsiDosen extends Controller
                            AND (mk.nama_matakuliah LIKE '%Skripsi%' OR mk.nama_matakuliah LIKE '%Tugas Akhir%' OR mk.nama_matakuliah LIKE '%Laporan Tugas Akhir%')
                            AND mk.nama_matakuliah NOT LIKE '%proposal%'
                          LIMIT 1),
-                        (SELECT is_obe 
+                        (SELECT cpmk_based 
                          FROM akd_matakuliah 
                          WHERE kode_program_studi = m.kode_program_studi 
                            AND (nama_matakuliah LIKE '%Skripsi%' OR nama_matakuliah LIKE '%Tugas Akhir%' OR nama_matakuliah LIKE '%Laporan Tugas Akhir%') 
@@ -223,7 +223,7 @@ class SkripsiDosen extends Controller
                          LIMIT 1),
                         1
                     )
-                END as is_obe"),
+                END as cpmk_based"),
                 'm.kode_program_studi as kode_prodi',
                 'p.nama_program_studi',
                 'u.tanggal_ujian as tgl_ujian',
@@ -341,11 +341,11 @@ class SkripsiDosen extends Controller
         $mhs = DB::table('akd_mahasiswa')->where('nim', $ujian->nim)->first();
         $kode_prodi = $mhs ? $mhs->kode_program_studi : null;
 
-        // Tentukan apakah bertipe OBE atau Non-OBE
-        $is_obe_grading = true;
+        // Tentukan apakah bertipe CPMK-Based atau Non-CPMK-Based
+        $is_cpmk_based = true;
         $skripsi = DB::table('akd_skripsi')->where('id', $ujian->id_skripsi)->first();
         if ($skripsi && !empty($skripsi->target_luaran) && $skripsi->target_luaran !== 'buku_skripsi') {
-            $is_obe_grading = true;
+            $is_cpmk_based = true;
         } else {
             $mhs_mk = DB::table('akd_detail_krs as dk')
                 ->join('akd_kelas_kuliah as kk', 'dk.id_kelas', '=', 'kk.id_kelas')
@@ -360,7 +360,7 @@ class SkripsiDosen extends Controller
                       ->orWhere('mk.nama_matakuliah', 'like', '%Laporan Tugas Akhir%');
                 })
                 ->where('mk.nama_matakuliah', 'not like', '%proposal%')
-                ->select('mk.is_obe')
+                ->select('mk.cpmk_based')
                 ->first();
 
             if (!$mhs_mk && $kode_prodi) {
@@ -372,17 +372,17 @@ class SkripsiDosen extends Controller
                           ->orWhere('nama_matakuliah', 'like', '%Laporan Tugas Akhir%');
                     })
                     ->where('nama_matakuliah', 'not like', '%proposal%')
-                    ->select('is_obe')
+                    ->select('cpmk_based')
                     ->first();
             }
 
             if ($mhs_mk) {
-                $is_obe_grading = $mhs_mk->is_obe == 1;
+                $is_cpmk_based = $mhs_mk->cpmk_based == 1;
             }
         }
 
         $examiner_scores = [];
-        if ($is_obe_grading) {
+        if ($is_cpmk_based) {
             $rubrics_list = collect();
             if ($kode_prodi) {
                 $rubrics_list = DB::table('akd_skripsi_rubrik_cpmk')

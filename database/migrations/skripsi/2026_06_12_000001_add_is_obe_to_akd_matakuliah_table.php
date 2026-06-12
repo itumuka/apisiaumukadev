@@ -14,7 +14,7 @@ class AddIsObeToAkdMatakuliahTable extends Migration
     {
         Schema::table('akd_matakuliah', function (Blueprint $table) {
             if (!Schema::hasColumn('akd_matakuliah', 'is_obe')) {
-                $table->tinyInteger('is_obe')->default(1)->comment('1=OBE (CPMK), 0=Non-OBE (Direct Score)')->after('sifat_matakuliah');
+                $table->tinyInteger('is_obe')->default(1)->comment('1=OBE (CPMK), 0=Non-OBE (Direct Score)')->after('kode_bayar');
             }
         });
     }

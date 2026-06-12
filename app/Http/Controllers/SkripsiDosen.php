@@ -200,6 +200,7 @@ class SkripsiDosen extends Controller
                 'm.kode_penilaian',
                 's.judul',
                 's.target_luaran',
+                DB::raw("CASE WHEN s.target_luaran IS NOT NULL AND s.target_luaran != 'buku_skripsi' THEN 1 ELSE 0 END as is_obe"),
                 DB::raw("CASE 
                     WHEN s.target_luaran IS NOT NULL AND s.target_luaran != 'buku_skripsi' THEN 1 
                     ELSE COALESCE(

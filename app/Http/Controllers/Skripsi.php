@@ -112,7 +112,25 @@ class Skripsi extends Controller
                             ->exists();
                     }
 
-                    if ($hasDispensasi) {
+                    $hasFullScholarship = DB::table('keu_beasiswa_mahasiswa as bm')
+                        ->join('keu_sumber_beasiswa as s', 'bm.id_sumber_beasiswa', '=', 's.id_sumber_beasiswa')
+                        ->where('bm.nim', $nim)
+                        ->where('bm.status_aktif', 1)
+                        ->where('s.jenis_beasiswa', 'full')
+                        ->exists();
+
+                    $hasUjianScholarship = $hasFullScholarship || DB::table('keu_beasiswa_mahasiswa as bm')
+                        ->join('keu_beasiswa_cakupan as bc', 'bm.id_sumber_beasiswa', '=', 'bc.id_sumber_beasiswa')
+                        ->where('bm.nim', $nim)
+                        ->where('bm.status_aktif', 1)
+                        ->where('bc.persentase_potongan', 100.00)
+                        ->where(function($q) use ($prodiConfig) {
+                            $q->where('bc.kode_komponen', 'like', '%' . $prodiConfig->ta_komponen_bayar_ujian . '%')
+                              ->orWhere('bc.kode_komponen', 'like', '%Ujian%');
+                        })
+                        ->exists();
+
+                    if ($hasDispensasi || $hasUjianScholarship) {
                         $bayar_ujian = true;
                     } else if (!empty($prodiConfig->ta_komponen_bayar_ujian)) {
                         $nama_biaya = $prodiConfig->ta_komponen_bayar_ujian;

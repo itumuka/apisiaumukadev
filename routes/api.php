@@ -36,6 +36,7 @@ Route::get('/akademik/template-presensi', 'Akademik@templatepresensiexport')->na
 Route::get('/akademik/pkkmb/template', 'Akademik@pkkmbTemplate')->name('akpkkmbTemplate');
 Route::get("/akademik/download-bantuan", "Akademik@download_bantuan")->name('dsndownload_bantuan');
 Route::get("/mahasiswa/download-bantuan-mhs", "Akademik@download_bantuan_mhs")->name('mhsdownload_bantuan');
+Route::get("/akademik/jadwalujian/export-template", "AkademikTools@export_template_jadwalujian")->name('export_template_jadwalujian');
 Route::middleware(['jwtverifie'])->group(function () {
     Route::post("/mahasiswa/cekhereg", "Mahasiswa@cekhereg")->name('cekhereg');
     Route::get("/mahasiswa/filter-khs", "Mahasiswa@filter_khs")->name('filter_khs');
@@ -187,7 +188,6 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::post("/akademik/update-rps", "Akademik@update_url_rps")->name('update_url_rps');
     Route::post("/akademik/edit-makulpenawaran", "Akademik@edit_makulpenawaran")->name('edit_makulpenawaran');
     Route::post("/akademik/edit-jadwalujian", "Akademik@edit_jadwalujian")->name('edit_jadwalujian');
-    Route::get("/akademik/jadwalujian/export-template", "AkademikTools@export_template_jadwalujian")->name('export_template_jadwalujian');
     Route::post("/akademik/jadwalujian/import", "AkademikTools@import_jadwalujian")->name('import_jadwalujian');
     Route::post("/akademik/edit-makulpenawaran-dkn", "Akademik@edit_makulpenawaran_dkn")->name('edit_makulpenawaran_dkn');
     Route::get("/akademik/hapus-makulpenawaran", "Akademik@hapus_makulpenawaran")->name('hapus_makulpenawaran');

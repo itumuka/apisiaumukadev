@@ -15,13 +15,18 @@ class JadwalUjianImport implements ToCollection, WithStartRow
     public function collection(Collection $collection)
     {
         foreach ($collection as $index => $row) {
-            $rowNum = $index + 8; // Baris Excel asli
+            $rowNum = $index + 13; // Baris Excel asli
             
             $id_tawar = isset($row[1]) ? trim($row[1]) : null;
             $id_kelas = isset($row[2]) ? trim($row[2]) : null;
             
             // Lewati jika data kunci kosong
             if (empty($id_tawar) || empty($id_kelas)) {
+                continue;
+            }
+
+            // Lewati jika bukan numerik (seperti teks header)
+            if (!is_numeric($id_tawar) || !is_numeric($id_kelas)) {
                 continue;
             }
 
@@ -117,7 +122,7 @@ class JadwalUjianImport implements ToCollection, WithStartRow
 
     public function startRow(): int
     {
-        return 8; // Memulai dari baris ke-8 (melewati header & petunjuk)
+        return 13; // Memulai dari baris ke-13 (data setelah header)
     }
 
     public function getFailures()

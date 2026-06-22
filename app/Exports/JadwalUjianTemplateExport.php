@@ -29,6 +29,7 @@ class JadwalUjianTemplateExport extends DefaultValueBinder implements WithCustom
 
     public function view(): View
     {
+        libxml_use_internal_errors(true);
         $data = DB::table('akd_kelas_kuliah')
             ->join('akd_penawaran_matakuliah', 'akd_kelas_kuliah.id_tawar', '=', 'akd_penawaran_matakuliah.id_tawar')
             ->join('akd_matakuliah', 'akd_matakuliah.id_matakuliah', '=', 'akd_penawaran_matakuliah.id_matakuliah')

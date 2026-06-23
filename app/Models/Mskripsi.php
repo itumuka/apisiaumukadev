@@ -1023,6 +1023,8 @@ class Mskripsi extends Model
                 'm.nama_mahasiswa',
                 'p.nama_program_studi',
                 'p.ta_minimal_bimbingan as ta_minimal_bimbingan',
+                'p.ta_ada_sempro',
+                'p.ta_sempro_skema',
                 's.judul',
                 's.topik',
                 's.status as status_skripsi',

@@ -33,29 +33,16 @@ class Makademik extends Model
     }
     public function cek_transkrip_krs(Request $request)
     {
-        $cek_transkrip_krs = DB::select("SELECT nim,mk.smt_matakuliah,mk.kode_matakuliah,mk.id_matakuliah,mk.nama_matakuliah,mk.sks_matakuliah,akd_mahasiswa.tahun_kurikulum,
-        (
-        SELECT MIN(akd_transkrip.nilai) AS nilai
-                FROM akd_transkrip
-                WHERE akd_transkrip.nim ='" . $request->nim . "' AND akd_transkrip.id_matakuliah = mk.id_matakuliah
-        ) AS nilai,
-        (
-        SELECT MAX(mutu)
-                FROM akd_transkrip
-                JOIN akd_matakuliah ON akd_matakuliah.id_matakuliah = akd_transkrip.id_matakuliah 
-                JOIN akd_predikat_nilai_huruf ON akd_transkrip.nilai = akd_predikat_nilai_huruf.nilai_huruf_akhir 
-                WHERE akd_transkrip.nim ='" . $request->nim . "' AND akd_transkrip.id_matakuliah = mk.id_matakuliah
-        ) AS mutu_nilai,
-        (
-        SELECT MAX(akd_matakuliah.sks_matakuliah*mutu) AS kum_sksmutu
-                FROM akd_transkrip
-                JOIN akd_matakuliah ON akd_matakuliah.id_matakuliah = akd_transkrip.id_matakuliah 
-                JOIN akd_predikat_nilai_huruf ON akd_transkrip.nilai = akd_predikat_nilai_huruf.nilai_huruf_akhir 
-                WHERE akd_transkrip.nim ='" . $request->nim . "' AND akd_transkrip.id_matakuliah = mk.id_matakuliah
-        ) AS kum_sksmutu
-        FROM akd_mahasiswa
-        JOIN akd_matakuliah mk ON akd_mahasiswa.tahun_kurikulum=mk.tahun_kurikulum 
-        AND akd_mahasiswa.kode_program_studi = mk.kode_program_studi WHERE nim ='" . $request->nim . "'");
+        $cek_transkrip_krs = DB::select("SELECT akd_transkrip.nim, akd_matakuliah.smt_matakuliah, akd_matakuliah.kode_matakuliah, akd_matakuliah.id_matakuliah, akd_matakuliah.nama_matakuliah, akd_matakuliah.sks_matakuliah, 
+        MIN(akd_transkrip.nilai) as nilai, 
+        MAX(akd_predikat_nilai_huruf.mutu) AS mutu_nilai, 
+        (akd_matakuliah.sks_matakuliah*MAX(mutu)) AS kum_sksmutu 
+        FROM akd_transkrip
+        JOIN akd_matakuliah ON akd_matakuliah.id_matakuliah = akd_transkrip.id_matakuliah 
+        JOIN akd_predikat_nilai_huruf ON akd_transkrip.nilai = akd_predikat_nilai_huruf.nilai_huruf_akhir 
+        WHERE akd_transkrip.nim ='" . $request->nim . "' 
+        GROUP BY akd_transkrip.id_matakuliah 
+        ORDER BY akd_matakuliah.smt_matakuliah");
 
         return $cek_transkrip_krs;
     }

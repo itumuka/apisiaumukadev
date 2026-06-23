@@ -95,12 +95,7 @@ class Mdekanat extends Model
 
     public function daftarmhs_pa(Request $request)
     {
-        $daftarmhs_pa = DB::select("SELECT akd_mahasiswa.nim, nama_mahasiswa, tahun_angkatan,nama_agama,nama_program_pendidikan, nama_program_studi, adm_camaba.telp AS no_hp, CONCAT_WS(' ', gelar_depan, simpeg_pegawai.nama,gelar_belakang) AS dosen_wali, IF(sks_ambil > 0, 'KRS','Tidak KRS') AS status_krs,tbl1.nim AS cekher,
-        (CASE 
-            WHEN akd_mahasiswa.tahun_angkatan IS NOT NULL AND akd_mahasiswa.tahun_angkatan > 0 
-            THEN (CAST('" . $request->tahun . "' AS SIGNED) - CAST(akd_mahasiswa.tahun_angkatan AS SIGNED)) * 2 + CAST('" . $request->semester . "' AS SIGNED)
-            ELSE 1 
-         END) AS semester
+        $daftarmhs_pa = DB::select("SELECT akd_mahasiswa.nim, nama_mahasiswa, tahun_angkatan,nama_agama,nama_program_pendidikan, nama_program_studi, adm_camaba.telp AS no_hp, CONCAT_WS(' ', gelar_depan, simpeg_pegawai.nama,gelar_belakang) AS dosen_wali, IF(sks_ambil > 0, 'KRS','Tidak KRS') AS status_krs,tbl1.nim AS cekher,akd_mahasiswa.semester
         FROM akd_mahasiswa 
         LEFT JOIN adm_camaba ON adm_camaba.no_pendaftaran = akd_mahasiswa.no_pendaftaran
         LEFT JOIN mst_agama ON akd_mahasiswa.kode_agama = mst_agama.kode_agama
@@ -111,17 +106,24 @@ class Mdekanat extends Model
         LEFT JOIN simpeg_pegawai ON simpeg_pegawai.id = akd_mahasiswa.id_dosen_wali
         WHERE akd_mahasiswa.lulus=0 AND akd_program_studi.kode_fakultas = '" . $request->kode_fakultas . "' ORDER BY tahun_angkatan DESC");
 
+        $active_tahun = intval($request->tahun);
+        $active_semester = intval($request->semester);
+
+        foreach ($daftarmhs_pa as $row) {
+            $angkatan = intval($row->tahun_angkatan);
+            if ($angkatan > 0 && $active_tahun > 0 && $active_semester > 0) {
+                $row->semester = ($active_tahun - $angkatan) * 2 + $active_semester;
+            } else {
+                $row->semester = 1;
+            }
+        }
+
         return $daftarmhs_pa;
     }
 
     public function daftarmhs_prodi(Request $request)
     {
-        $daftarmhs_prodi = DB::select("SELECT akd_mahasiswa.nim, nama_mahasiswa, tahun_angkatan, nama_agama, nama_program_pendidikan, nama_program_studi, adm_camaba.telp AS no_hp, CONCAT_WS(' ', gelar_depan, simpeg_pegawai.nama, gelar_belakang) AS dosen_wali, IF(sks_ambil > 0, 'KRS','Tidak KRS') AS status_krs, tbl1.nim AS cekher,
-        (CASE 
-            WHEN akd_mahasiswa.tahun_angkatan IS NOT NULL AND akd_mahasiswa.tahun_angkatan > 0 
-            THEN (CAST('" . $request->tahun . "' AS SIGNED) - CAST(akd_mahasiswa.tahun_angkatan AS SIGNED)) * 2 + CAST('" . $request->semester . "' AS SIGNED)
-            ELSE 1 
-         END) AS semester
+        $daftarmhs_prodi = DB::select("SELECT akd_mahasiswa.nim, nama_mahasiswa, tahun_angkatan, nama_agama, nama_program_pendidikan, nama_program_studi, adm_camaba.telp AS no_hp, CONCAT_WS(' ', gelar_depan, simpeg_pegawai.nama, gelar_belakang) AS dosen_wali, IF(sks_ambil > 0, 'KRS','Tidak KRS') AS status_krs, tbl1.nim AS cekher, akd_mahasiswa.semester
         FROM akd_mahasiswa 
         LEFT JOIN adm_camaba ON adm_camaba.no_pendaftaran = akd_mahasiswa.no_pendaftaran
         LEFT JOIN mst_agama ON akd_mahasiswa.kode_agama = mst_agama.kode_agama
@@ -131,6 +133,18 @@ class Mdekanat extends Model
         LEFT JOIN akd_program_studi ON akd_mahasiswa.kode_program_studi = akd_program_studi.kode_program_studi
         LEFT JOIN simpeg_pegawai ON simpeg_pegawai.id = akd_mahasiswa.id_dosen_wali
         WHERE akd_mahasiswa.lulus=0 AND akd_mahasiswa.kode_program_studi = '" . $request->kode_program_studi . "' ORDER BY tahun_angkatan DESC");
+
+        $active_tahun = intval($request->tahun);
+        $active_semester = intval($request->semester);
+
+        foreach ($daftarmhs_prodi as $row) {
+            $angkatan = intval($row->tahun_angkatan);
+            if ($angkatan > 0 && $active_tahun > 0 && $active_semester > 0) {
+                $row->semester = ($active_tahun - $angkatan) * 2 + $active_semester;
+            } else {
+                $row->semester = 1;
+            }
+        }
 
         return $daftarmhs_prodi;
     }

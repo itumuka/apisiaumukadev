@@ -2621,6 +2621,7 @@ TIME_FORMAT(jam_mulai, '%H:%i') AS jam_mulai, TIME_FORMAT(jam_selesai, '%H:%i') 
             ->select(
                 'm.nim as nim',
                 'm.nama_mahasiswa as nama_mahasiswa',
+                'm.tahun_angkatan as tahun_angkatan',
                 'p.nama_program_pendidikan',
                 's.nama_program_studi'
             )
@@ -2637,7 +2638,21 @@ TIME_FORMAT(jam_mulai, '%H:%i') AS jam_mulai, TIME_FORMAT(jam_selesai, '%H:%i') 
             $query->where('m.kode_program_studi', $request->kode_prodi);
         }
 
-        return $query->get()->toArray();
+        $results = $query->get()->toArray();
+
+        $active_tahun = intval($request->tahun);
+        $active_semester = intval($request->semester);
+
+        foreach ($results as $row) {
+            $angkatan = intval($row->tahun_angkatan);
+            if ($angkatan > 0 && $active_tahun > 0 && $active_semester > 0) {
+                $row->semester = ($active_tahun - $angkatan) * 2 + $active_semester;
+            } else {
+                $row->semester = 1;
+            }
+        }
+
+        return $results;
     }
     // Transkip Akademik
     public function transkipakademik(Request $request)

@@ -2623,10 +2623,12 @@ TIME_FORMAT(jam_mulai, '%H:%i') AS jam_mulai, TIME_FORMAT(jam_selesai, '%H:%i') 
                 'm.nama_mahasiswa as nama_mahasiswa',
                 'm.tahun_angkatan as tahun_angkatan',
                 'p.nama_program_pendidikan',
-                's.nama_program_studi'
+                's.nama_program_studi',
+                'j.nama_jenjang_pendidikan'
             )
             ->join('akd_program_pendidikan as p', 'm.kode_program_pendidikan', '=', 'p.kode_program_pendidikan')
             ->join('akd_program_studi as s', 'm.kode_program_studi', '=', 's.kode_program_studi')
+            ->leftJoin('akd_jenjang_pendidikan as j', 's.kode_jenjang_pendidikan', '=', 'j.kode_jenjang_pendidikan')
             ->where('m.tahun_angkatan', $request->tahunangkatan)
             ->whereExists(function ($q) {
                 $q->select(DB::raw(1))

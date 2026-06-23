@@ -420,6 +420,7 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::post("/mahasiswa/skripsi/hapus-bimbingan/{id}", "Skripsi@hapus_bimbingan")->name('skripsi_mhs_hapus_bimbingan');
     Route::get("/mahasiswa/skripsi/get-luaran", "Skripsi@get_luaran")->name('skripsi_get_luaran');
     Route::post("/mahasiswa/skripsi/simpan-luaran", "Skripsi@simpan_luaran")->name('skripsi_simpan_luaran');
+    Route::post("/mahasiswa/skripsi/batalkan-ujian", "Skripsi@batalkan_ujian")->name('skripsi_batalkan_ujian');
     Route::get("/mahasiswa/skripsi/portofolio-cpl", "Skripsi@get_portofolio_cpl")->name('skripsi_portofolio_cpl');
     // Admin Rekap Bimbingan
     Route::get("/akademik/rekap-bimbingan", "Skripsi@rekap_bimbingan")->name('skripsi_rekap_bimbingan');

@@ -599,9 +599,48 @@ class Skripsi extends Controller
                 'target_luaran' => $skripsi->target_luaran,
                 'luaran' => $luaran,
                 'ujian_locked' => $ujian_locked,
-                'notice_message' => $notice_message
+                'notice_message' => $notice_message,
+                'ujian_status' => $ujian ? $ujian->status : null
             ]
         ]);
+    }
+
+    /**
+     * Batalkan Pendaftaran Ujian Skripsi (Hanya jika status 'diajukan')
+     */
+    public function batalkan_ujian(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'nim' => 'required'
+        ]);
+
+        if ($v->fails()) return response()->json(['error' => $v->errors()->all()], 422);
+
+        $nim = $request->nim;
+        $skripsi = DB::table('akd_skripsi')->where('nim', $nim)->first();
+        if (!$skripsi) return response()->json(['error' => 'Data skripsi tidak ditemukan.'], 404);
+
+        $ujian = DB::table('akd_skripsi_ujian')
+            ->where('id_skripsi', $skripsi->id)
+            ->where('nim', $nim)
+            ->first();
+
+        if (!$ujian) {
+            return response()->json(['error' => 'Pendaftaran ujian tidak ditemukan.'], 404);
+        }
+
+        if ($ujian->status !== 'diajukan') {
+            return response()->json(['error' => 'Pendaftaran ujian tidak dapat dibatalkan karena sudah diproses atau dijadwalkan oleh Kaprodi.'], 400);
+        }
+
+        DB::table('akd_skripsi_ujian')
+            ->where('id', $ujian->id)
+            ->update([
+                'status' => 'pending',
+                'updated_at' => now()
+            ]);
+
+        return response()->json(['success' => 'Pendaftaran ujian berhasil dibatalkan. Silakan sesuaikan data Anda dan ajukan kembali.']);
     }
 
     /**

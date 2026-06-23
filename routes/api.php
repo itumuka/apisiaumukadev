@@ -84,6 +84,7 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::get("/dekanat/setting-dosenwali", "Dekanat@dosenwali")->name('dkndosenwali');
     Route::get("/dekanat/daftar-mahasiswa", "Dekanat@daftar_mahasiswa")->name('dkndaftar_mahasiswa');
     Route::get("/dekanat/daftarmhs-pa", "Dekanat@daftarmhs_pa")->name('dkndaftarmhs_pa');
+    Route::get("/kaprodi/daftarmhs-prodi", "Dekanat@daftarmhs_prodi")->name('kpndaftarmhs_prodi');
     Route::get("/dekanat/list-mhs-already", "Dekanat@list_mhs_already")->name('dknlist_mhs_already');
     Route::post("/dekanat/add-mhs-dosenwali", "Dekanat@save_mhs_dosenwali")->name('dknsave_mhs_dosenwali');
     Route::get("/dekanat/nonaktif-mhs-dosenwali", "Dekanat@nonaktif_mhs_dosenwali")->name('dknnonaktif_mhs_dosenwali');

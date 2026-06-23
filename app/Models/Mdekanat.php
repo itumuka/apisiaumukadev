@@ -108,6 +108,23 @@ class Mdekanat extends Model
 
         return $daftarmhs_pa;
     }
+
+    public function daftarmhs_prodi(Request $request)
+    {
+        $daftarmhs_prodi = DB::select("SELECT akd_mahasiswa.nim, nama_mahasiswa, tahun_angkatan, nama_agama, nama_program_pendidikan, nama_program_studi, adm_camaba.telp AS no_hp, CONCAT_WS(' ', gelar_depan, simpeg_pegawai.nama, gelar_belakang) AS dosen_wali, IF(sks_ambil > 0, 'KRS','Tidak KRS') AS status_krs, tbl1.nim AS cekher, akd_mahasiswa.semester
+        FROM akd_mahasiswa 
+        LEFT JOIN adm_camaba ON adm_camaba.no_pendaftaran = akd_mahasiswa.no_pendaftaran
+        LEFT JOIN mst_agama ON akd_mahasiswa.kode_agama = mst_agama.kode_agama
+        LEFT JOIN akd_program_pendidikan ON akd_mahasiswa.kode_program_pendidikan = akd_program_pendidikan.kode_program_pendidikan
+        LEFT JOIN (SELECT akd_heregistrasi.nim, akd_krs.sks_ambil FROM akd_heregistrasi
+        LEFT JOIN akd_krs ON akd_krs.id_heregistrasi = akd_heregistrasi.id_heregistrasi WHERE akd_heregistrasi.tahun = '" . $request->tahun . "' AND akd_heregistrasi.semester='" . $request->semester . "') AS tbl1 ON akd_mahasiswa.nim=tbl1.nim 
+        LEFT JOIN akd_program_studi ON akd_mahasiswa.kode_program_studi = akd_program_studi.kode_program_studi
+        LEFT JOIN simpeg_pegawai ON simpeg_pegawai.id = akd_mahasiswa.id_dosen_wali
+        WHERE akd_mahasiswa.lulus=0 AND akd_mahasiswa.kode_program_studi = '" . $request->kode_program_studi . "' ORDER BY tahun_angkatan DESC");
+
+        return $daftarmhs_prodi;
+    }
+
     public function edit_password_dekanadmin(Request $request)
     {
         $edit_password_dekanadmin = DB::table('user')

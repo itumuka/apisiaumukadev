@@ -121,6 +121,11 @@ class Dekanat extends Controller
         $daftarmhs_pa = $this->dekanat->daftarmhs_pa($request);
         return $daftarmhs_pa;
     }
+    public function daftarmhs_prodi(Request $request)
+    {
+        $daftarmhs_prodi = $this->dekanat->daftarmhs_prodi($request);
+        return $daftarmhs_prodi;
+    }
     public function daftar_mahasiswa(Request $request)
     {
         $daftar_mahasiswa = $this->dekanat->daftar_mahasiswa($request);

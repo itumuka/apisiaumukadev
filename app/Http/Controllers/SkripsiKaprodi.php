@@ -40,6 +40,33 @@ class SkripsiKaprodi extends Controller
             ->whereNotNull('s.nim')
             ->get();
 
+        $prodiConfig = DB::table('akd_program_studi')
+            ->where('kode_program_studi', $kode_prodi)
+            ->select('ta_ada_sempro', 'ta_sempro_skema')
+            ->first();
+        
+        $ta_ada_sempro = $prodiConfig ? $prodiConfig->ta_ada_sempro : 1;
+        $ta_sempro_skema = $prodiConfig ? $prodiConfig->ta_sempro_skema : 'skripsi';
+
+        foreach ($data as $row) {
+            if ($ta_ada_sempro == 0 || $ta_ada_sempro === '0' || $ta_ada_sempro === 'Tidak') {
+                $row->sempro_status = 'tidak_wajib';
+            } else if ($ta_sempro_skema === 'matakuliah') {
+                $hasPassedMk = $this->checkSemproByMataKuliahLulus($row->nim, $kode_prodi);
+                $row->sempro_status = $hasPassedMk ? 'lulus_matakuliah' : 'belum_lulus_matakuliah';
+            } else {
+                $proposal = DB::table('akd_skripsi_proposal')
+                    ->where('nim', $row->nim)
+                    ->orderBy('iterasi', 'desc')
+                    ->first();
+                if ($proposal) {
+                    $row->sempro_status = $proposal->status;
+                } else {
+                    $row->sempro_status = 'belum_mengajukan';
+                }
+            }
+        }
+
         return response()->json($data);
     }
 
@@ -296,7 +323,7 @@ class SkripsiKaprodi extends Controller
             ->first();
 
         if (!$proposal) {
-            return response()->json(['error' => 'Data proposal tidak ditemukan'], 404);
+            return response()->json(['error' => 'Mahasiswa belum mengunggah naskah proposal di sistem. Plotting jadwal hanya dapat dilakukan jika mahasiswa sudah mengunggah draf proposal.'], 422);
         }
 
         DB::table('akd_skripsi_proposal')
@@ -1459,6 +1486,42 @@ class SkripsiKaprodi extends Controller
             DB::rollBack();
             return response()->json(['error' => 'Gagal menyetujui bimbingan: ' . $e->getMessage()], 500);
         }
+    }
+
+    private function checkSemproByMataKuliahLulus($nim, $kode_prodi)
+    {
+        $mappedMk = DB::table('akd_skripsi_sempro_mk')
+            ->where('kode_prodi', $kode_prodi)
+            ->pluck('id_matakuliah')
+            ->toArray();
+
+        if (empty($mappedMk)) {
+            return $this->checkSemproGrade($nim);
+        }
+
+        $has_grade = DB::table('akd_transkrip as t')
+            ->where('t.nim', $nim)
+            ->whereIn('t.id_matakuliah', $mappedMk)
+            ->whereNotIn('t.nilai', ['D', 'E'])
+            ->count() > 0;
+
+        return $has_grade;
+    }
+
+    private function checkSemproGrade($nim)
+    {
+        $has_grade = DB::table('akd_transkrip as t')
+            ->join('akd_matakuliah as mk', 't.id_matakuliah', '=', 'mk.id_matakuliah')
+            ->where('t.nim', $nim)
+            ->where(function($query) {
+                $query->where('mk.nama_matakuliah', 'like', '%seminar proposal%')
+                      ->orWhere('mk.nama_matakuliah', 'like', '%sempro%')
+                      ->orWhere('mk.nama_matakuliah', 'like', '%proposal%');
+            })
+            ->whereNotIn('t.nilai', ['D', 'E'])
+            ->count() > 0;
+
+        return $has_grade;
     }
 }
 

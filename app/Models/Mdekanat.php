@@ -95,7 +95,12 @@ class Mdekanat extends Model
 
     public function daftarmhs_pa(Request $request)
     {
-        $daftarmhs_pa = DB::select("SELECT akd_mahasiswa.nim, nama_mahasiswa, tahun_angkatan,nama_agama,nama_program_pendidikan, nama_program_studi, adm_camaba.telp AS no_hp, CONCAT_WS(' ', gelar_depan, simpeg_pegawai.nama,gelar_belakang) AS dosen_wali, IF(sks_ambil > 0, 'KRS','Tidak KRS') AS status_krs,tbl1.nim AS cekher,akd_mahasiswa.semester
+        $daftarmhs_pa = DB::select("SELECT akd_mahasiswa.nim, nama_mahasiswa, tahun_angkatan,nama_agama,nama_program_pendidikan, nama_program_studi, adm_camaba.telp AS no_hp, CONCAT_WS(' ', gelar_depan, simpeg_pegawai.nama,gelar_belakang) AS dosen_wali, IF(sks_ambil > 0, 'KRS','Tidak KRS') AS status_krs,tbl1.nim AS cekher,
+        (CASE 
+            WHEN akd_mahasiswa.tahun_angkatan IS NOT NULL AND akd_mahasiswa.tahun_angkatan > 0 
+            THEN (CAST('" . $request->tahun . "' AS SIGNED) - CAST(akd_mahasiswa.tahun_angkatan AS SIGNED)) * 2 + CAST('" . $request->semester . "' AS SIGNED)
+            ELSE 1 
+         END) AS semester
         FROM akd_mahasiswa 
         LEFT JOIN adm_camaba ON adm_camaba.no_pendaftaran = akd_mahasiswa.no_pendaftaran
         LEFT JOIN mst_agama ON akd_mahasiswa.kode_agama = mst_agama.kode_agama
@@ -111,7 +116,12 @@ class Mdekanat extends Model
 
     public function daftarmhs_prodi(Request $request)
     {
-        $daftarmhs_prodi = DB::select("SELECT akd_mahasiswa.nim, nama_mahasiswa, tahun_angkatan, nama_agama, nama_program_pendidikan, nama_program_studi, adm_camaba.telp AS no_hp, CONCAT_WS(' ', gelar_depan, simpeg_pegawai.nama, gelar_belakang) AS dosen_wali, IF(sks_ambil > 0, 'KRS','Tidak KRS') AS status_krs, tbl1.nim AS cekher, akd_mahasiswa.semester
+        $daftarmhs_prodi = DB::select("SELECT akd_mahasiswa.nim, nama_mahasiswa, tahun_angkatan, nama_agama, nama_program_pendidikan, nama_program_studi, adm_camaba.telp AS no_hp, CONCAT_WS(' ', gelar_depan, simpeg_pegawai.nama, gelar_belakang) AS dosen_wali, IF(sks_ambil > 0, 'KRS','Tidak KRS') AS status_krs, tbl1.nim AS cekher,
+        (CASE 
+            WHEN akd_mahasiswa.tahun_angkatan IS NOT NULL AND akd_mahasiswa.tahun_angkatan > 0 
+            THEN (CAST('" . $request->tahun . "' AS SIGNED) - CAST(akd_mahasiswa.tahun_angkatan AS SIGNED)) * 2 + CAST('" . $request->semester . "' AS SIGNED)
+            ELSE 1 
+         END) AS semester
         FROM akd_mahasiswa 
         LEFT JOIN adm_camaba ON adm_camaba.no_pendaftaran = akd_mahasiswa.no_pendaftaran
         LEFT JOIN mst_agama ON akd_mahasiswa.kode_agama = mst_agama.kode_agama

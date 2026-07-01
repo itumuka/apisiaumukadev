@@ -33,29 +33,16 @@ class Makademik extends Model
     }
     public function cek_transkrip_krs(Request $request)
     {
-        $cek_transkrip_krs = DB::select("SELECT nim,mk.smt_matakuliah,mk.kode_matakuliah,mk.id_matakuliah,mk.nama_matakuliah,mk.sks_matakuliah,akd_mahasiswa.tahun_kurikulum,
-        (
-        SELECT MIN(akd_transkrip.nilai) AS nilai
-                FROM akd_transkrip
-                WHERE akd_transkrip.nim ='" . $request->nim . "' AND akd_transkrip.id_matakuliah = mk.id_matakuliah
-        ) AS nilai,
-        (
-        SELECT MAX(mutu)
-                FROM akd_transkrip
-                JOIN akd_matakuliah ON akd_matakuliah.id_matakuliah = akd_transkrip.id_matakuliah 
-                JOIN akd_predikat_nilai_huruf ON akd_transkrip.nilai = akd_predikat_nilai_huruf.nilai_huruf_akhir 
-                WHERE akd_transkrip.nim ='" . $request->nim . "' AND akd_transkrip.id_matakuliah = mk.id_matakuliah
-        ) AS mutu_nilai,
-        (
-        SELECT MAX(akd_matakuliah.sks_matakuliah*mutu) AS kum_sksmutu
-                FROM akd_transkrip
-                JOIN akd_matakuliah ON akd_matakuliah.id_matakuliah = akd_transkrip.id_matakuliah 
-                JOIN akd_predikat_nilai_huruf ON akd_transkrip.nilai = akd_predikat_nilai_huruf.nilai_huruf_akhir 
-                WHERE akd_transkrip.nim ='" . $request->nim . "' AND akd_transkrip.id_matakuliah = mk.id_matakuliah
-        ) AS kum_sksmutu
-        FROM akd_mahasiswa
-        JOIN akd_matakuliah mk ON akd_mahasiswa.tahun_kurikulum=mk.tahun_kurikulum 
-        AND akd_mahasiswa.kode_program_studi = mk.kode_program_studi WHERE nim ='" . $request->nim . "'");
+        $cek_transkrip_krs = DB::select("SELECT akd_transkrip.nim, akd_matakuliah.smt_matakuliah, akd_matakuliah.kode_matakuliah, akd_matakuliah.id_matakuliah, akd_matakuliah.nama_matakuliah, akd_matakuliah.sks_matakuliah, 
+        MIN(akd_transkrip.nilai) as nilai, 
+        MAX(akd_predikat_nilai_huruf.mutu) AS mutu_nilai, 
+        (akd_matakuliah.sks_matakuliah*MAX(mutu)) AS kum_sksmutu 
+        FROM akd_transkrip
+        JOIN akd_matakuliah ON akd_matakuliah.id_matakuliah = akd_transkrip.id_matakuliah 
+        JOIN akd_predikat_nilai_huruf ON akd_transkrip.nilai = akd_predikat_nilai_huruf.nilai_huruf_akhir 
+        WHERE akd_transkrip.nim ='" . $request->nim . "' 
+        GROUP BY akd_transkrip.id_matakuliah 
+        ORDER BY akd_matakuliah.smt_matakuliah");
 
         return $cek_transkrip_krs;
     }
@@ -1739,6 +1726,14 @@ TIME_FORMAT(jam_mulai, '%H:%i') AS jam_mulai, TIME_FORMAT(jam_selesai, '%H:%i') 
         if (in_array('ta_komponen_bayar', $existingColumns) && $request->has('eta_komponen_bayar') && $request->eta_komponen_bayar !== null) {
             $updateData['ta_komponen_bayar'] = $request->eta_komponen_bayar;
         }
+
+        if (in_array('ta_komponen_bayar_ujian', $existingColumns) && $request->has('eta_komponen_bayar_ujian') && $request->eta_komponen_bayar_ujian !== null) {
+            $updateData['ta_komponen_bayar_ujian'] = $request->eta_komponen_bayar_ujian;
+        }
+
+        if (in_array('ta_is_obe', $existingColumns) && $request->has('eta_is_obe') && $request->eta_is_obe !== null) {
+            $updateData['ta_is_obe'] = $request->eta_is_obe;
+        }
         
         if ($request->has('eta_minimal_bimbingan') && $request->eta_minimal_bimbingan !== null) {
             if (in_array('ta_minimal_bimbingan', $existingColumns)) {
@@ -1924,11 +1919,27 @@ TIME_FORMAT(jam_mulai, '%H:%i') AS jam_mulai, TIME_FORMAT(jam_selesai, '%H:%i') 
         return $ubahstatuskalenderakademik;
     }
     // Mata Kuliah
-    public function matakuliah()
+    public function matakuliah(Request $request = null)
     {
-        $matakuliah = DB::select("SELECT *,a.kode_program_studi AS kode_prodi FROM akd_matakuliah a JOIN akd_program_studi b ON a.kode_program_studi=b.kode_program_studi ORDER BY a.id_matakuliah DESC");
+        $query = "SELECT *, a.kode_program_studi AS kode_prodi FROM akd_matakuliah a JOIN akd_program_studi b ON a.kode_program_studi=b.kode_program_studi";
+        $conditions = [];
+        if ($request) {
+            if ($request->has('kode_prodi') && !empty($request->kode_prodi)) {
+                $conditions[] = "a.kode_program_studi = '" . $request->kode_prodi . "'";
+            }
+            if ($request->has('tahun_kurikulum') && !empty($request->tahun_kurikulum)) {
+                $conditions[] = "a.tahun_kurikulum = '" . $request->tahun_kurikulum . "'";
+            }
+        }
+        if (count($conditions) > 0) {
+            $query .= " WHERE " . implode(" AND ", $conditions);
+        }
+        $query .= " ORDER BY a.id_matakuliah DESC";
+
+        $matakuliah = DB::select($query);
         return $matakuliah;
     }
+
 
     public function simpan_matakuliah(Request $request)
     {
@@ -2606,20 +2617,71 @@ TIME_FORMAT(jam_mulai, '%H:%i') AS jam_mulai, TIME_FORMAT(jam_selesai, '%H:%i') 
     // Transkip Nilai
     public function transkipnilai(Request $request)
     {
-        $thn = $request->tahunangkatan;
-        $transkipnilai = DB::select("SELECT * FROM (SELECT DISTINCT akd_transkrip.nim AS nim,akd_mahasiswa.nama_mahasiswa AS nama_mahasiswa,akd_program_pendidikan.nama_program_pendidikan,akd_program_studi.nama_program_studi 
-        FROM akd_mahasiswa,akd_transkrip,akd_program_pendidikan,akd_program_studi WHERE akd_mahasiswa.nim=akd_transkrip.nim AND akd_mahasiswa.tahun_angkatan='" . $thn . "' 
-        AND akd_mahasiswa.kode_program_pendidikan=akd_program_pendidikan.kode_program_pendidikan AND akd_mahasiswa.kode_program_studi=akd_program_studi.kode_program_studi) AS nilaimahasiswa");
-        return $transkipnilai;
+        $query = DB::table('akd_mahasiswa as m')
+            ->select(
+                'm.nim as nim',
+                'm.nama_mahasiswa as nama_mahasiswa',
+                'm.tahun_angkatan as tahun_angkatan',
+                'p.nama_program_pendidikan',
+                's.nama_program_studi',
+                'j.nama_jenjang_pendidikan'
+            )
+            ->join('akd_program_pendidikan as p', 'm.kode_program_pendidikan', '=', 'p.kode_program_pendidikan')
+            ->join('akd_program_studi as s', 'm.kode_program_studi', '=', 's.kode_program_studi')
+            ->leftJoin('akd_jenjang_pendidikan as j', 's.kode_jenjang_pendidikan', '=', 'j.kode_jenjang_pendidikan')
+            ->where('m.tahun_angkatan', $request->tahunangkatan)
+            ->whereExists(function ($q) {
+                $q->select(DB::raw(1))
+                  ->from('akd_transkrip as t')
+                  ->whereColumn('t.nim', 'm.nim');
+            });
+
+        if ($request->kode_prodi) {
+            $query->where('m.kode_program_studi', $request->kode_prodi);
+        }
+
+        $results = $query->get()->toArray();
+
+        $active_tahun = intval($request->tahun);
+        $active_semester = intval($request->semester);
+
+        foreach ($results as $row) {
+            $angkatan = intval($row->tahun_angkatan);
+            if ($angkatan > 0 && $active_tahun > 0 && $active_semester > 0) {
+                $row->semester = ($active_tahun - $angkatan) * 2 + $active_semester;
+            } else {
+                $row->semester = 1;
+            }
+        }
+
+        return $results;
     }
     // Transkip Akademik
     public function transkipakademik(Request $request)
     {
-        $thn = $request->tahunangkatan;
-        $transkipakademik = DB::select("select * from (select distinct akd_transkrip.nim as nm,akd_mahasiswa.nama_mahasiswa as namamhs,akd_program_pendidikan.nama_program_pendidikan,akd_program_studi.nama_program_studi from akd_mahasiswa,akd_transkrip,akd_program_pendidikan,akd_program_studi where akd_mahasiswa.nim=akd_transkrip.nim and akd_mahasiswa.tahun_angkatan='$thn' 
-        and akd_mahasiswa.kode_program_pendidikan=akd_program_pendidikan.kode_program_pendidikan and akd_mahasiswa.kode_program_studi=akd_program_studi.kode_program_studi and akd_mahasiswa.kode_program_studi) as nilaimahasiswa LEFT JOIN akd_kelengkapan_transkrip a ON a.nim=nilaimahasiswa.nm
-        ");
-        return $transkipakademik;
+        $query = DB::table('akd_mahasiswa as m')
+            ->select(
+                'm.nim as nm',
+                'm.nama_mahasiswa as namamhs',
+                'p.nama_program_pendidikan',
+                's.nama_program_studi',
+                'a.*'
+            )
+            ->join('akd_program_pendidikan as p', 'm.kode_program_pendidikan', '=', 'p.kode_program_pendidikan')
+            ->join('akd_program_studi as s', 'm.kode_program_studi', '=', 's.kode_program_studi')
+            ->leftJoin('akd_kelengkapan_transkrip as a', 'a.nim', '=', 'm.nim')
+            ->where('m.tahun_angkatan', $request->tahunangkatan)
+            ->whereExists(function ($q) {
+                $q->select(DB::raw(1))
+                  ->from('akd_transkrip as t')
+                  ->whereColumn('t.nim', 'm.nim');
+            });
+
+        if ($request->kode_prodi) {
+            $query->where('m.kode_program_studi', $request->kode_prodi);
+        }
+
+        return $query->get()->toArray();
     }
 
     public function cetaktranskipakademik(Request $request)

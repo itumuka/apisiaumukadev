@@ -23,6 +23,9 @@ Route::post("/auth-login", "Auth@auth")->name('auth_login');
 Route::get("/bearerToken", "Auth@bearerToken")->name('bearerToken');
 Route::get("/logout", "Auth@logout")->name('logout');
 Route::get("/check-session", "Mahasiswa@check_session")->name('check_session');
+Route::get('/debug-db-triggers', function() {
+    return response()->json(Illuminate\Support\Facades\DB::select("SHOW TRIGGERS"));
+});
 
 Route::get('/akademik/template-input-nilai-uts', 'Akademik@templatenilai_uts_export')->name('templatenilai_uts_export');
 Route::get('/akademik/template-input-nilai-uas', 'Akademik@templatenilai_uas_export')->name('templatenilai_uas_export');
@@ -33,6 +36,7 @@ Route::get('/akademik/template-presensi', 'Akademik@templatepresensiexport')->na
 Route::get('/akademik/pkkmb/template', 'Akademik@pkkmbTemplate')->name('akpkkmbTemplate');
 Route::get("/akademik/download-bantuan", "Akademik@download_bantuan")->name('dsndownload_bantuan');
 Route::get("/mahasiswa/download-bantuan-mhs", "Akademik@download_bantuan_mhs")->name('mhsdownload_bantuan');
+Route::get("/akademik/jadwalujian/export-template", "AkademikTools@export_template_jadwalujian")->name('export_template_jadwalujian');
 Route::middleware(['jwtverifie'])->group(function () {
     Route::post("/mahasiswa/cekhereg", "Mahasiswa@cekhereg")->name('cekhereg');
     Route::get("/mahasiswa/filter-khs", "Mahasiswa@filter_khs")->name('filter_khs');
@@ -80,6 +84,7 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::get("/dekanat/setting-dosenwali", "Dekanat@dosenwali")->name('dkndosenwali');
     Route::get("/dekanat/daftar-mahasiswa", "Dekanat@daftar_mahasiswa")->name('dkndaftar_mahasiswa');
     Route::get("/dekanat/daftarmhs-pa", "Dekanat@daftarmhs_pa")->name('dkndaftarmhs_pa');
+    Route::get("/kaprodi/daftarmhs-prodi", "Dekanat@daftarmhs_prodi")->name('kpndaftarmhs_prodi');
     Route::get("/dekanat/list-mhs-already", "Dekanat@list_mhs_already")->name('dknlist_mhs_already');
     Route::post("/dekanat/add-mhs-dosenwali", "Dekanat@save_mhs_dosenwali")->name('dknsave_mhs_dosenwali');
     Route::get("/dekanat/nonaktif-mhs-dosenwali", "Dekanat@nonaktif_mhs_dosenwali")->name('dknnonaktif_mhs_dosenwali');
@@ -161,6 +166,7 @@ Route::middleware(['jwtverifie'])->group(function () {
 
     Route::get("/akademik/home-kalenderakademik", "Akademik@home_kalenderakademik")->name('home_kalenderakademik');
     Route::get("/akademik/home-kalenderakademikbase", "Akademik@home_kalenderakademikbase")->name('home_kalenderakademikbase');
+    Route::get("/akademik/dashboard-stats", "Akademik@dashboard_stats")->name('dashboard_stats');
     Route::get("/akademik/change-session-tahunakademik", "Akademik@change_session_tahunakademik")->name('change_session_tahunakademik');
     Route::get("/akademik/select-tahunakademik", "Akademik@select_tahunakademik")->name('select_tahunakademik');
     Route::get("/akademik/tahunajaran", "Akademik@tahunajaran")->name('aktahunajaran');
@@ -183,6 +189,7 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::post("/akademik/update-rps", "Akademik@update_url_rps")->name('update_url_rps');
     Route::post("/akademik/edit-makulpenawaran", "Akademik@edit_makulpenawaran")->name('edit_makulpenawaran');
     Route::post("/akademik/edit-jadwalujian", "Akademik@edit_jadwalujian")->name('edit_jadwalujian');
+    Route::post("/akademik/jadwalujian/import", "AkademikTools@import_jadwalujian")->name('import_jadwalujian');
     Route::post("/akademik/edit-makulpenawaran-dkn", "Akademik@edit_makulpenawaran_dkn")->name('edit_makulpenawaran_dkn');
     Route::get("/akademik/hapus-makulpenawaran", "Akademik@hapus_makulpenawaran")->name('hapus_makulpenawaran');
     //input khs
@@ -340,6 +347,7 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::get("/akademik/select-semester", "Akademik@select_semester")->name('select_semester');
     Route::get("/akademik/select-makulprasyarat", "Akademik@select_makulprasyarat")->name('select_makulprasyarat');
     Route::post("/akademik/edit-transkipnilai", "Akademik@edit_transkipnilai")->name('edit_transkipnilai');
+    Route::post("/akademik/sinkron-transkrip", "Akademik@sinkron_transkrip")->name('sinkron_transkrip');
     Route::get("/akademik/ubahstatus-registrasi", "Akademik@ubahstatus_registrasi")->name('ubahstatus_registrasi');
     Route::get("/akademik/edittampilkurikulum", "Akademik@edittampilkurikulum")->name('akedittampilkurikulum');
     Route::get("/akademik/edittampiljenisher", "Akademik@edittampiljenisher")->name('akedittampiljenisher');
@@ -409,8 +417,11 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::post("/mahasiswa/skripsi/upload-berkas", "Skripsi@upload_berkas")->name('skripsi_upload_berkas');
     Route::get("/mahasiswa/skripsi/log-bimbingan", "Skripsi@log_bimbingan")->name('skripsi_mhs_log_bimbingan');
     Route::post("/mahasiswa/skripsi/tambah-bimbingan", "Skripsi@tambah_bimbingan")->name('skripsi_mhs_tambah_bimbingan');
+    Route::post("/mahasiswa/skripsi/update-bimbingan/{id}", "Skripsi@update_bimbingan")->name('skripsi_mhs_update_bimbingan');
+    Route::post("/mahasiswa/skripsi/hapus-bimbingan/{id}", "Skripsi@hapus_bimbingan")->name('skripsi_mhs_hapus_bimbingan');
     Route::get("/mahasiswa/skripsi/get-luaran", "Skripsi@get_luaran")->name('skripsi_get_luaran');
     Route::post("/mahasiswa/skripsi/simpan-luaran", "Skripsi@simpan_luaran")->name('skripsi_simpan_luaran');
+    Route::post("/mahasiswa/skripsi/batalkan-ujian", "Skripsi@batalkan_ujian")->name('skripsi_batalkan_ujian');
     Route::get("/mahasiswa/skripsi/portofolio-cpl", "Skripsi@get_portofolio_cpl")->name('skripsi_portofolio_cpl');
     // Admin Rekap Bimbingan
     Route::get("/akademik/rekap-bimbingan", "Skripsi@rekap_bimbingan")->name('skripsi_rekap_bimbingan');
@@ -430,18 +441,23 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::post("/kaprodi/skripsi/update-sk", "SkripsiKaprodi@update_sk")->name('skripsi_update_sk');
 
     // Konfigurasi Sempro & CPMK Rubrik
+    Route::get("/kaprodi/skripsi/config-grading/{kode_prodi}", "SkripsiKaprodi@get_grading_config")->name('skripsi_kaprodi_get_config_grading');
+    Route::post("/kaprodi/skripsi/update-config-grading", "SkripsiKaprodi@update_grading_config")->name('skripsi_kaprodi_update_config_grading');
     Route::get("/kaprodi/skripsi/config-sempro/{kode_prodi}", "SkripsiKaprodi@get_config_sempro")->name('skripsi_kaprodi_get_config_sempro');
     Route::post("/kaprodi/skripsi/update-config-sempro", "SkripsiKaprodi@update_config_sempro")->name('skripsi_kaprodi_update_config_sempro');
     Route::get("/kaprodi/skripsi/get-rubrik-cpmk/{kode_prodi}", "SkripsiKaprodi@get_rubrik_cpmk")->name('skripsi_kaprodi_get_rubrik_cpmk');
     Route::post("/kaprodi/skripsi/save-rubrik-cpmk", "SkripsiKaprodi@save_rubrik_cpmk")->name('skripsi_kaprodi_save_rubrik_cpmk');
     Route::post("/kaprodi/skripsi/reset-rubrik-cpmk", "SkripsiKaprodi@reset_rubrik_cpmk")->name('skripsi_kaprodi_reset_rubrik_cpmk');
+    Route::get("/kaprodi/skripsi/get-cpl/{kode_prodi}", "SkripsiKaprodi@get_cpl")->name('skripsi_kaprodi_get_cpl');
+    Route::post("/kaprodi/skripsi/save-cpl", "SkripsiKaprodi@save_cpl")->name('skripsi_kaprodi_save_cpl');
+    Route::post("/kaprodi/skripsi/delete-cpl/{id}", "SkripsiKaprodi@delete_cpl")->name('skripsi_kaprodi_delete_cpl');
+    Route::post("/kaprodi/skripsi/toggle-cpl/{id}", "SkripsiKaprodi@toggle_cpl")->name('skripsi_kaprodi_toggle_cpl');
     Route::get("/kaprodi/skripsi/search-matakuliah", "SkripsiKaprodi@search_matakuliah")->name('skripsi_kaprodi_search_matakuliah');
     Route::get("/kaprodi/skripsi/syarat-prodi/{kode_prodi}", "SkripsiKaprodi@list_syarat_prodi")->name('skripsi_kaprodi_list_syarat');
     Route::get("/kaprodi/skripsi/master-syarat", "SkripsiKaprodi@list_master_syarat")->name('skripsi_kaprodi_master_syarat');
     Route::post("/kaprodi/skripsi/save-syarat-prodi", "SkripsiKaprodi@save_syarat_prodi")->name('skripsi_kaprodi_save_syarat');
     Route::delete("/kaprodi/skripsi/delete-syarat-prodi/{id}", "SkripsiKaprodi@delete_syarat_prodi")->name('skripsi_kaprodi_delete_syarat');
     Route::get("/akademik/skripsi/list-config-sempro", "SkripsiKaprodi@list_config_sempro")->name('skripsi_admin_list_config_sempro');
-    Route::post("/akademik/skripsi/validate-config-sempro", "SkripsiKaprodi@validate_config_sempro")->name('skripsi_admin_validate_config_sempro');
 
     // Modul Skripsi Dosen Pembimbing
     Route::get("/dosen/skripsi/dashboard", "SkripsiDosen@dashboard")->name('skripsi_dosen_dashboard');
@@ -460,4 +476,11 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::post("/dosen/skripsi/setuju-berita-acara", "SkripsiDosen@setuju_berita_acara")->name('skripsi_dosen_setuju_berita_acara');
     Route::get("/kaprodi/skripsi/penetapan-nilai", "SkripsiKaprodi@list_penetapan_nilai")->name('skripsi_kaprodi_list_penetapan_nilai');
     Route::post("/kaprodi/skripsi/tetapkan-nilai", "SkripsiKaprodi@tetapkan_nilai")->name('skripsi_kaprodi_tetapkan_nilai');
+
+    // API Cetak Data & Approval Bimbingan
+    Route::get("/akademik/skripsi/bimbingan/cetak-data", "Skripsi@get_cetak_bimbingan")->name('skripsi_cetak_bimbingan_data');
+
+    // API Kaprodi Bimbingan Approval
+    Route::get("/kaprodi/skripsi/bimbingan/list", "SkripsiKaprodi@list_bimbingan_prodi")->name('skripsi_kaprodi_list_bimbingan');
+    Route::post("/kaprodi/skripsi/bimbingan/approve", "SkripsiKaprodi@approve_bimbingan_prodi")->name('skripsi_kaprodi_approve_bimbingan');
 });

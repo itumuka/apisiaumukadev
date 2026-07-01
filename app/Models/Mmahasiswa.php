@@ -23,7 +23,7 @@ class Mmahasiswa extends Model
         $nim = $request->nim;
 
         $cek_kalender = collect(DB::select("SELECT * FROM akd_kalender_akademik WHERE kode_kegiatan_akademik='2' AND semester='$smtr' AND tahun='$tahun' ORDER BY tahun DESC"))->first();
-        $cekbeasiswa = collect(DB::select("SELECT * FROM akd_mahasiswa WHERE beasiswa='1' AND nim='$nim'"))->count();
+        $cekbeasiswa = collect(DB::select("SELECT * FROM keu_beasiswa_mahasiswa WHERE status_aktif='1' AND nim='$nim'"))->count();
 
         $cek_her = collect(DB::select("SELECT akd_heregistrasi.id_heregistrasi 
         FROM akd_heregistrasi JOIN akd_krs ON akd_heregistrasi.id_heregistrasi = akd_krs.id_heregistrasi 
@@ -110,7 +110,7 @@ class Mmahasiswa extends Model
         $querydispenuas = DB::select("SELECT nim FROM akd_dispensasi WHERE nim='" . $request->nim . "' AND tahun='" . $tahun . "' AND semester='" . $smtr . "' AND jenis='UAS'");
         $cekdispenuas = collect($querydispenuas)->count();
 
-        $cekbeasiswa = collect(DB::select("SELECT * FROM akd_mahasiswa WHERE beasiswa='1' AND nim='$nim'"))->count();
+        $cekbeasiswa = collect(DB::select("SELECT * FROM keu_beasiswa_mahasiswa WHERE status_aktif='1' AND nim='$nim'"))->count();
 
         return response()->json([
             'kalendar_uts_tanggal_mulai' => date('Y-m-d', strtotime("-15 day", strtotime($cek_kalender_uts->tanggal_mulai))),
@@ -881,7 +881,7 @@ class Mmahasiswa extends Model
         $querybyr1 = DB::select("SELECT * FROM (SELECT nim,(SELECT SUM(bayar) AS jum FROM keu_bayar aaa WHERE aaa.id_tagihan=keu_tagihan.id_tagihan) AS bayar FROM keu_tagihan 
         WHERE nim='" . $request->nim . "' AND tahun='" . $request->tahun . "' AND semester='" . $request->semester . "' AND nama_biaya LIKE '%SPP VARIABLE%') AS tbl1 WHERE bayar IS NOT NULL");
         $querybyr2 = DB::select("SELECT nim FROM akd_dispensasi WHERE nim='" . $request->nim . "' AND tahun='" . $request->tahun . "' AND semester='" . $request->semester . "' AND jenis='UTS'");
-        $querybyr3 = DB::select("SELECT nim FROM akd_mahasiswa WHERE nim='" . $request->nim . "' AND beasiswa='1'");
+        $querybyr3 = DB::select("SELECT nim FROM keu_beasiswa_mahasiswa WHERE nim='" . $request->nim . "' AND status_aktif='1'");
         $cekbyr1 = collect($querybyr1)->count();
         $cekbyr2 = collect($querybyr2)->count();
         $cekbyr3 = collect($querybyr3)->count();

@@ -88,6 +88,67 @@ class Skripsi extends Controller
         $skripsi = DB::table('akd_skripsi')->where('nim', $nim)->first();
         $hasil['judul_proposal'] = $skripsi ? $skripsi->judul : '';
 
+        // Add ta_is_obe and ujian_skripsi_lunas fields dynamically
+        $mhs = DB::table('akd_mahasiswa')->where('nim', $nim)->first();
+        $is_obe = 1;
+        $bayar_ujian = true;
+        if ($mhs) {
+            $prodiConfig = DB::table('akd_program_studi')
+                ->where('kode_program_studi', $mhs->kode_program_studi)
+                ->select('ta_komponen_bayar_ujian', 'ta_is_obe')
+                ->first();
+            if ($prodiConfig) {
+                $is_obe = isset($prodiConfig->ta_is_obe) ? $prodiConfig->ta_is_obe : 1;
+                if ($fase == 'ujian') {
+                    // Check if student has a dispensation for SKRIPSI
+                    $cekta = DB::table('akd_mreg')->where('trash', '1')->first();
+                    $hasDispensasi = false;
+                    if ($cekta) {
+                        $hasDispensasi = DB::table('akd_dispensasi')
+                            ->where('nim', $nim)
+                            ->where('tahun', $cekta->tahun)
+                            ->where('semester', $cekta->semester)
+                            ->where('jenis', 'SKRIPSI')
+                            ->exists();
+                    }
+
+                    $hasFullScholarship = DB::table('keu_beasiswa_mahasiswa as bm')
+                        ->join('keu_sumber_beasiswa as s', 'bm.id_sumber_beasiswa', '=', 's.id_sumber_beasiswa')
+                        ->where('bm.nim', $nim)
+                        ->where('bm.status_aktif', 1)
+                        ->where('s.jenis_beasiswa', 'full')
+                        ->exists();
+
+                    $hasUjianScholarship = $hasFullScholarship || DB::table('keu_beasiswa_mahasiswa as bm')
+                        ->join('keu_beasiswa_cakupan as bc', 'bm.id_sumber_beasiswa', '=', 'bc.id_sumber_beasiswa')
+                        ->where('bm.nim', $nim)
+                        ->where('bm.status_aktif', 1)
+                        ->where('bc.persentase_potongan', 100.00)
+                        ->where(function($q) use ($prodiConfig) {
+                            $q->where('bc.kode_komponen', 'like', '%' . $prodiConfig->ta_komponen_bayar_ujian . '%')
+                              ->orWhere('bc.kode_komponen', 'like', '%Ujian%');
+                        })
+                        ->exists();
+
+                    if ($hasDispensasi || $hasUjianScholarship) {
+                        $bayar_ujian = true;
+                    } else if (!empty($prodiConfig->ta_komponen_bayar_ujian)) {
+                        $nama_biaya = $prodiConfig->ta_komponen_bayar_ujian;
+                        $bayar_ujian = DB::table('keu_tagihan')
+                            ->where('nim', $nim)
+                            ->where('nama_biaya', 'like', '%' . $nama_biaya . '%')
+                            ->where('status', '1')
+                            ->count() > 0;
+                    } else {
+                        // Jika komponen bayar ujian kosong (seperti D3 Tugas Akhir), dianggap lunas / tanpa bayar ujian
+                        $bayar_ujian = true;
+                    }
+                }
+            }
+        }
+        $hasil['ta_is_obe'] = $is_obe;
+        $hasil['ujian_skripsi_lunas'] = $bayar_ujian;
+
         return response()->json([
             'status' => 'success',
             'data' => $hasil
@@ -159,10 +220,27 @@ class Skripsi extends Controller
 
         // Jika fase ujian, hubungkan ke akd_skripsi_ujian
         if ($request->fase == 'ujian') {
-            DB::table('akd_skripsi_ujian')->updateOrInsert(
-                ['id_skripsi' => $skripsi->id, 'nim' => $nim],
-                ['id_proposal' => $id_proposal, 'status' => 'pending', 'updated_at' => now()]
-            );
+            $ujianExist = DB::table('akd_skripsi_ujian')
+                ->where('id_skripsi', $skripsi->id)
+                ->where('nim', $nim)
+                ->first();
+            if (!$ujianExist) {
+                DB::table('akd_skripsi_ujian')->insert([
+                    'id_skripsi' => $skripsi->id,
+                    'nim' => $nim,
+                    'id_proposal' => $id_proposal,
+                    'status' => 'revisi',
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+            } else {
+                DB::table('akd_skripsi_ujian')
+                    ->where('id', $ujianExist->id)
+                    ->update([
+                        'id_proposal' => $id_proposal,
+                        'updated_at' => now()
+                    ]);
+            }
         }
 
         return response()->json(['success' => 'Naskah berhasil diunggah', 'id_proposal' => $id_proposal, 'iterasi' => $new_iterasi]);
@@ -375,6 +453,96 @@ class Skripsi extends Controller
     }
 
     /**
+     * Update Log Bimbingan Mahasiswa (Hanya untuk status 'pending' atau 'revisi')
+     */
+    public function update_bimbingan(Request $request, $id)
+    {
+        $v = Validator::make($request->all(), [
+            'nim' => 'required',
+            'tanggal' => 'required|date',
+            'topik' => 'required',
+            'uraian' => 'required',
+            'file_lampiran' => 'nullable|mimes:pdf,doc,docx|max:5120' // Max 5MB
+        ]);
+
+        if ($v->fails()) return response()->json(['error' => $v->errors()], 422);
+
+        $nim = $request->nim;
+        $log = DB::table('akd_skripsi_bimbingan')->where('id', $id)->first();
+
+        if (!$log) {
+            return response()->json(['error' => 'Catatan bimbingan tidak ditemukan.'], 404);
+        }
+
+        if ($log->nim !== $nim) {
+            return response()->json(['error' => 'Anda tidak memiliki akses ke catatan bimbingan ini.'], 403);
+        }
+
+        if (!in_array($log->status, ['pending', 'revisi'])) {
+            return response()->json(['error' => 'Catatan bimbingan sudah disetujui, tidak dapat diubah.'], 403);
+        }
+
+        $data = [
+            'tanggal' => $request->tanggal,
+            'topik' => $request->topik,
+            'uraian' => $request->uraian,
+            'updated_at' => now()
+        ];
+
+        if ($request->hasFile('file_lampiran')) {
+            // Hapus file lama jika ada
+            if ($log->path_file && Storage::exists($log->path_file)) {
+                Storage::delete($log->path_file);
+            }
+
+            $file = $request->file('file_lampiran');
+            $nama_file = "BIMBINGAN_" . time() . "_" . $file->getClientOriginalName();
+            $path = $file->storeAs("public/skripsi_bimbingan/{$nim}", $nama_file);
+            $data['path_file'] = $path;
+        }
+
+        DB::table('akd_skripsi_bimbingan')->where('id', $id)->update($data);
+
+        return response()->json(['success' => 'Catatan bimbingan berhasil diperbarui.']);
+    }
+
+    /**
+     * Hapus Log Bimbingan Mahasiswa (Hanya untuk status 'pending' atau 'revisi')
+     */
+    public function hapus_bimbingan(Request $request, $id)
+    {
+        $v = Validator::make($request->all(), [
+            'nim' => 'required'
+        ]);
+
+        if ($v->fails()) return response()->json(['error' => $v->errors()], 422);
+
+        $nim = $request->nim;
+        $log = DB::table('akd_skripsi_bimbingan')->where('id', $id)->first();
+
+        if (!$log) {
+            return response()->json(['error' => 'Catatan bimbingan tidak ditemukan.'], 404);
+        }
+
+        if ($log->nim !== $nim) {
+            return response()->json(['error' => 'Anda tidak memiliki akses ke catatan bimbingan ini.'], 403);
+        }
+
+        if (!in_array($log->status, ['pending', 'revisi'])) {
+            return response()->json(['error' => 'Catatan bimbingan sudah disetujui, tidak dapat dihapus.'], 403);
+        }
+
+        // Hapus file lampiran jika ada
+        if ($log->path_file && Storage::exists($log->path_file)) {
+            Storage::delete($log->path_file);
+        }
+
+        DB::table('akd_skripsi_bimbingan')->where('id', $id)->delete();
+
+        return response()->json(['success' => 'Catatan bimbingan berhasil dihapus.']);
+    }
+
+    /**
      * Admin: Rekap Bimbingan per Mahasiswa
      */
     public function rekap_bimbingan(Request $request)
@@ -387,7 +555,7 @@ class Skripsi extends Controller
                 's.id', 's.nim', 'm.nama_mahasiswa', 'p.nama_program_studi as prodi',
                 DB::raw("TRIM(CONCAT_WS(' ', d.gelar_depan, d.nama, d.gelar_belakang)) as pembimbing"),
                 DB::raw("(CASE WHEN s.fase_aktif = 'ujian' THEN 8 ELSE COALESCE(p.ta_minimal_bimbingan, 8) END) as min_bimbingan"),
-                DB::raw("(SELECT COUNT(*) FROM akd_skripsi_bimbingan b WHERE b.id_skripsi = s.id AND b.status IN ('disetujui','revisi')) as total_bimbingan")
+                DB::raw("(SELECT COUNT(*) FROM akd_skripsi_bimbingan b WHERE b.id_skripsi = s.id AND b.status IN ('disetujui', 'disetujui_kaprodi', 'disetujui_dekan', 'revisi')) as total_bimbingan")
             )
             ->orderBy('m.nama_mahasiswa', 'asc')
             ->get();
@@ -408,13 +576,71 @@ class Skripsi extends Controller
 
         $luaran = DB::table('akd_skripsi_luaran')->where('id_skripsi', $skripsi->id)->first();
         
+        $ujian = DB::table('akd_skripsi_ujian')->where('id_skripsi', $skripsi->id)->first();
+        $ujian_locked = false;
+        $notice_message = null;
+
+        if ($ujian) {
+            if (in_array($ujian->status, ['diajukan', 'disetujui', 'dijadwalkan', 'dinilai', 'menunggu_penetapan', 'ditetapkan', 'lulus', 'tidak_lulus'])) {
+                $ujian_locked = true;
+                if ($ujian->status == 'diajukan') {
+                    $notice_message = 'Pendaftaran Ujian Terkirim – Menunggu Penjadwalan Kaprodi.';
+                } else if (in_array($ujian->status, ['disetujui', 'dijadwalkan'])) {
+                    $notice_message = 'Pendaftaran Ujian Telah Disetujui & Dijadwalkan oleh Kaprodi.';
+                } else {
+                    $notice_message = 'Ujian Anda telah selesai dilaksanakan.';
+                }
+            }
+        }
+
         return response()->json([
             'status' => 'success',
             'data' => [
                 'target_luaran' => $skripsi->target_luaran,
-                'luaran' => $luaran
+                'luaran' => $luaran,
+                'ujian_locked' => $ujian_locked,
+                'notice_message' => $notice_message,
+                'ujian_status' => $ujian ? $ujian->status : null
             ]
         ]);
+    }
+
+    /**
+     * Batalkan Pendaftaran Ujian Skripsi (Hanya jika status 'diajukan')
+     */
+    public function batalkan_ujian(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'nim' => 'required'
+        ]);
+
+        if ($v->fails()) return response()->json(['error' => $v->errors()->all()], 422);
+
+        $nim = $request->nim;
+        $skripsi = DB::table('akd_skripsi')->where('nim', $nim)->first();
+        if (!$skripsi) return response()->json(['error' => 'Data skripsi tidak ditemukan.'], 404);
+
+        $ujian = DB::table('akd_skripsi_ujian')
+            ->where('id_skripsi', $skripsi->id)
+            ->where('nim', $nim)
+            ->first();
+
+        if (!$ujian) {
+            return response()->json(['error' => 'Pendaftaran ujian tidak ditemukan.'], 404);
+        }
+
+        if ($ujian->status !== 'diajukan') {
+            return response()->json(['error' => 'Pendaftaran ujian tidak dapat dibatalkan karena sudah diproses atau dijadwalkan oleh Kaprodi.'], 400);
+        }
+
+        DB::table('akd_skripsi_ujian')
+            ->where('id', $ujian->id)
+            ->update([
+                'status' => 'pending',
+                'updated_at' => now()
+            ]);
+
+        return response()->json(['success' => 'Pendaftaran ujian berhasil dibatalkan. Silakan sesuaikan data Anda dan ajukan kembali.']);
     }
 
     /**
@@ -490,31 +716,11 @@ class Skripsi extends Controller
             ->where('nim', $nim)
             ->first();
 
-        if (!$ujian) {
-            // Ambil proposal/naskah terakhir jika ada
-            $latestProposal = DB::table('akd_skripsi_proposal')
-                ->where('id_skripsi', $skripsi->id)
-                ->where('nim', $nim)
-                ->orderBy('iterasi', 'desc')
-                ->first();
-            
-            $id_proposal = $latestProposal ? $latestProposal->id : null;
-
-            // Inisialisasi otomatis pendaftaran ujian
-            $ujianId = DB::table('akd_skripsi_ujian')->insertGetId([
-                'id_skripsi' => $skripsi->id,
-                'nim' => $nim,
-                'id_proposal' => $id_proposal,
-                'status' => 'pending',
-                'created_at' => now(),
-                'updated_at' => now()
-            ]);
-
-            $ujian = DB::table('akd_skripsi_ujian')->where('id', $ujianId)->first();
-        }
-
-        if (in_array($ujian->status, ['diajukan', 'dijadwalkan', 'lulus'])) {
-            return response()->json(['error' => 'Pendaftaran ujian sudah diajukan sebelumnya.'], 409);
+        if (!$ujian || $ujian->status !== 'pending') {
+            if ($ujian && in_array($ujian->status, ['diajukan', 'dijadwalkan', 'lulus'])) {
+                return response()->json(['error' => 'Pendaftaran ujian sudah diajukan sebelumnya.'], 409);
+            }
+            return response()->json(['error' => 'Anda belum mendapatkan persetujuan (ACC Ujian) dari Dosen Pembimbing.'], 403);
         }
 
         // Update judul jika dikirimkan dari form pendaftaran ujian
@@ -574,12 +780,54 @@ class Skripsi extends Controller
                 ]
             ]);
         }
+        $mhs = DB::table('akd_mahasiswa')->where('nim', $nim)->first();
+        $kode_prodi = $mhs ? $mhs->kode_program_studi : null;
 
-        // Ambil kriteria CPMK dan pemetaan CPL
+        // Check if student's prodi has custom rubrics
+        $hasCustom = false;
+        if ($kode_prodi) {
+            $hasCustom = DB::table('akd_skripsi_rubrik_cpmk')
+                ->where('kode_prodi', $kode_prodi)
+                ->exists();
+        }
+
+        // Fetch active CPL descriptions to map in PHP (prevent SQL join duplication)
+        $active_cpls = collect([]);
+        if ($kode_prodi) {
+            $active_cpls = DB::table('akd_cpl')
+                ->where('is_aktif', 1)
+                ->where(function ($q) use ($kode_prodi) {
+                    $q->where('kode_prodi', $kode_prodi)
+                      ->orWhereNull('kode_prodi');
+                })
+                ->get();
+        }
+
+        // Ambil kriteria CPMK dan pemetaan CPL (termasuk KKM) untuk prodi mahasiswa
         $cpmk_cpl = DB::table('akd_skripsi_cpmk_cpl as cc')
             ->join('akd_skripsi_rubrik_cpmk as r', 'cc.id_cpmk', '=', 'r.id')
-            ->select('cc.kode_cpl', 'r.id as id_cpmk', 'r.kode_cpmk', 'r.nama_cpmk')
+            ->select('cc.kode_cpl', 'r.id as id_cpmk', 'r.kode_cpmk', 'r.nama_cpmk', 'r.kkm')
+            ->where(function ($query) use ($kode_prodi, $hasCustom) {
+                if ($hasCustom) {
+                    $query->where('r.kode_prodi', $kode_prodi);
+                } else {
+                    $query->whereNull('r.kode_prodi');
+                }
+            })
             ->get();
+
+        // Map CPL description in PHP
+        foreach ($cpmk_cpl as $item) {
+            $cpl_match = null;
+            if ($active_cpls->isNotEmpty()) {
+                // Prioritize prodi-specific CPL over global/null CPL
+                $cpl_match = $active_cpls->where('kode_cpl', $item->kode_cpl)->where('kode_prodi', $kode_prodi)->first();
+                if (!$cpl_match) {
+                    $cpl_match = $active_cpls->where('kode_cpl', $item->kode_cpl)->first();
+                }
+            }
+            $item->cpl_deskripsi = $cpl_match ? $cpl_match->deskripsi : '';
+        }
 
         // Hitung rata-rata nilai per CPMK dari semua penguji/verifikator
         $cpmk_averages = [];
@@ -601,9 +849,12 @@ class Skripsi extends Controller
                 }
             }
             if ($count > 0) {
+                $achievement = round($sum / $count, 2);
                 $cpl_achievements[] = [
                     'cpl' => $cpl_code,
-                    'achievement' => round($sum / $count, 2)
+                    'deskripsi' => $mappings->first()->cpl_deskripsi ?? '',
+                    'achievement' => $achievement,
+                    'status' => $achievement >= 70.00 ? 'Tercapai' : 'Perlu Penguatan'
                 ];
             }
         }
@@ -611,11 +862,14 @@ class Skripsi extends Controller
         $cpmk_scores_formatted = [];
         foreach ($cpmk_averages as $cpmk_id => $avg) {
             $item = $cpmk_cpl->firstWhere('id_cpmk', $cpmk_id);
+            $kkm = $item ? (float)$item->kkm : 70.00;
             $cpmk_scores_formatted[] = [
                 'id_cpmk' => $cpmk_id,
                 'kode_cpmk' => $item ? $item->kode_cpmk : '',
                 'nama_cpmk' => $item ? $item->nama_cpmk : 'Kriteria ' . $cpmk_id,
-                'nilai' => round($avg, 2)
+                'nilai' => round($avg, 2),
+                'kkm' => $kkm,
+                'status' => round($avg, 2) >= $kkm ? 'Lulus' : 'Belum Lulus'
             ];
         }
 
@@ -630,4 +884,127 @@ class Skripsi extends Controller
             ]
         ]);
     }
-}
+
+    /**
+     * Get data for printing guidance booklet
+     */
+    public function get_cetak_bimbingan(Request $request)
+    {
+        $nim = $request->nim;
+        if (!$nim) return response()->json(['error' => 'NIM diperlukan'], 400);
+
+        // 1. Get student profile, program study, faculty, and head of program study (Kaprodi)
+        $mhs = DB::table('akd_mahasiswa as m')
+            ->join('akd_program_studi as p', 'm.kode_program_studi', '=', 'p.kode_program_studi')
+            ->leftJoin('akd_fakultas as f', 'p.kode_fakultas', '=', 'f.kode_fakultas')
+            ->leftJoin('simpeg_pegawai as k', 'p.pimpinan_prodi', '=', 'k.id')
+            ->select(
+                'm.nim', 'm.nama_mahasiswa', 'p.nama_program_studi', 'f.nama_fakultas',
+                DB::raw("TRIM(CONCAT_WS(' ', k.gelar_depan, k.nama, k.gelar_belakang)) as nama_kaprodi"),
+                'k.nidn as nidn_kaprodi',
+                'p.pimpinan_prodi'
+            )
+            ->where('m.nim', $nim)
+            ->first();
+
+        if (!$mhs) return response()->json(['error' => 'Data mahasiswa tidak ditemukan'], 404);
+
+        $skripsi = DB::table('akd_skripsi as s')
+            ->leftJoin('simpeg_pegawai as p1', 's.id_dosen_pembimbing1', '=', 'p1.id')
+            ->leftJoin('simpeg_pegawai as p2', 's.id_dosen_pembimbing2', '=', 'p2.id')
+            ->select(
+                's.*',
+                DB::raw("TRIM(CONCAT_WS(' ', p1.gelar_depan, p1.nama, p1.gelar_belakang)) as nama_pembimbing1"),
+                'p1.nidn as nidn_pembimbing1',
+                DB::raw("TRIM(CONCAT_WS(' ', p2.gelar_depan, p2.nama, p2.gelar_belakang)) as nama_pembimbing2"),
+                'p2.nidn as nidn_pembimbing2'
+            )
+            ->where('s.nim', $nim)
+            ->first();
+
+        if ($skripsi) {
+            $updateSkripsi = [];
+
+            // Auto-generate/fetch QR for Kaprodi (saved in akd_skripsi)
+            if ($mhs && $mhs->pimpinan_prodi && empty($skripsi->valid_id_kaprodi)) {
+                $valid_id_kaprodi = uniqid('kaprodi_', true);
+                $updateSkripsi['valid_id_kaprodi'] = $valid_id_kaprodi;
+                $skripsi->valid_id_kaprodi = $valid_id_kaprodi;
+            }
+
+            // Auto-generate/fetch QR for Pembimbing 1 (saved in akd_skripsi)
+            if ($skripsi->id_dosen_pembimbing1 && empty($skripsi->valid_id_pembimbing1)) {
+                $valid_id_p1 = uniqid('pemb1_', true);
+                $updateSkripsi['valid_id_pembimbing1'] = $valid_id_p1;
+                $skripsi->valid_id_pembimbing1 = $valid_id_p1;
+            }
+
+            // Auto-generate/fetch QR for Pembimbing 2 (saved in akd_skripsi)
+            if ($skripsi->id_dosen_pembimbing2 && empty($skripsi->valid_id_pembimbing2)) {
+                $valid_id_p2 = uniqid('pemb2_', true);
+                $updateSkripsi['valid_id_pembimbing2'] = $valid_id_p2;
+                $skripsi->valid_id_pembimbing2 = $valid_id_p2;
+            }
+
+            if (!empty($updateSkripsi)) {
+                DB::table('akd_skripsi')->where('id', $skripsi->id)->update($updateSkripsi);
+            }
+
+            // Map Kaprodi's valid_id directly to the student profile for easy frontend retrieval
+            $mhs->valid_id_kaprodi = $skripsi->valid_id_kaprodi;
+        }
+
+        // 3. Get approved bimbingan logs (minimal approved by Dosen Pembimbing)
+        // Approved by Dosen means status is 'disetujui' or 'disetujui_kaprodi'.
+        $logs = [];
+        if ($skripsi) {
+            $logs = DB::table('akd_skripsi_bimbingan as b')
+                ->leftJoin('simpeg_pegawai as d', 'b.id_dosen', '=', 'd.id')
+                ->select(
+                    'b.id', 'b.tanggal', 'b.topik', 'b.uraian', 'b.status', 'b.catatan_dosen', 'b.created_at', 'b.updated_at',
+                    DB::raw("TRIM(CONCAT_WS(' ', d.gelar_depan, d.nama, d.gelar_belakang)) as nama_dosen"),
+                    'd.nidn as nidn_dosen',
+                    'b.id_dosen',
+                    'b.valid_id'
+                )
+                ->where(function($query) use ($skripsi, $nim) {
+                    $query->where('b.id_skripsi', $skripsi->id)
+                          ->orWhere('b.nim', $nim);
+                })
+                ->whereIn('b.status', ['disetujui', 'disetujui_kaprodi', 'disetujui_dekan'])
+                ->orderBy('b.tanggal', 'asc')
+                ->orderBy('b.id', 'asc')
+                ->get();
+
+            // Auto-generate/fetch QR for each log's valid_id if missing
+            foreach ($logs as $log) {
+                if (empty($log->valid_id)) {
+                    $valid_id = uniqid('bimb_', true);
+                    DB::table('akd_skripsi_bimbingan')
+                        ->where('id', $log->id)
+                        ->update(['valid_id' => $valid_id, 'updated_at' => now()]);
+                    $log->valid_id = $valid_id;
+                }
+            }
+        }
+
+        // Debugging: get all raw logs regardless of status
+        $all_raw_logs = [];
+        if ($skripsi) {
+            $all_raw_logs = DB::table('akd_skripsi_bimbingan')
+                ->where('nim', $nim)
+                ->select('id', 'status', 'id_skripsi')
+                ->get();
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'mahasiswa' => $mhs,
+                'skripsi' => $skripsi,
+                'logs' => $logs,
+                'debug_all_logs' => $all_raw_logs
+            ]
+        ]);
+    }
+}

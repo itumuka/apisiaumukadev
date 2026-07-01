@@ -388,80 +388,110 @@ class Akademik extends Controller
 	    public function sinkron_transkrip(Request $request)
     {
         $validation = Validator::make($request->all(), [
-            'nim' => 'required'
+            'nim' => 'nullable',
+            'kode_prodi' => 'nullable',
+            'tahun_angkatan' => 'nullable'
         ]);
 
         if ($validation->fails()) {
             return response()->json(['status' => 'error', 'message' => $validation->errors()->all()], 400);
         }
 
-        $nim = $request->nim;
+        $nims = [];
+        if ($request->nim) {
+            $nims = array_filter(explode('-', $request->nim));
+        } else if ($request->kode_prodi || $request->tahun_angkatan) {
+            $query = DB::table('akd_mahasiswa')->where('trash', 0);
+            if ($request->kode_prodi) {
+                $query->where('kode_program_studi', $request->kode_prodi);
+            }
+            if ($request->tahun_angkatan) {
+                $query->where('tahun_angkatan', $request->tahun_angkatan);
+            }
+            $nims = $query->pluck('nim')->toArray();
+        }
+
+        if (empty($nims)) {
+            return response()->json(['status' => 'error', 'message' => 'Parameter nim, kode_prodi, atau tahun_angkatan harus diisi.'], 400);
+        }
 
         try {
             DB::beginTransaction();
 
-            // 1. Ambil data nilai dari KRS beserta bobotnya (mutu) berdasarkan sistem penilaian mahasiswa
-            $allGrades = DB::table('akd_detail_krs as dk')
-                ->join('akd_kelas_kuliah as c', 'dk.id_kelas', '=', 'c.id_kelas')
-                ->join('akd_penawaran_matakuliah as p', 'c.id_tawar', '=', 'p.id_tawar')
-                ->join('akd_matakuliah as m', 'p.id_matakuliah', '=', 'm.id_matakuliah')
-                ->join('akd_krs as k', 'dk.id_krs', '=', 'k.id_krs')
-                ->join('akd_heregistrasi as h', 'k.id_heregistrasi', '=', 'h.id_heregistrasi')
-                ->join('akd_mahasiswa as mhs', 'h.nim', '=', 'mhs.nim')
-                ->join('akd_predikat_nilai_huruf as pre', function ($join) {
-                    $join->on('dk.nilai_akhir_huruf', '=', 'pre.nilai_huruf_akhir')
-                        ->on('mhs.kode_penilaian', '=', 'pre.kode_nilai');
-                })
-                ->where('h.nim', $nim)
-                ->whereNotNull('dk.nilai_akhir_huruf')
-                ->where('dk.nilai_akhir_huruf', '!=', '')
-                ->select(
-                    'h.nim',
-                    'p.id_matakuliah',
-                    'dk.nilai_akhir_huruf as nilai',
-                    'm.tahun_kurikulum',
-                    'mhs.kode_penilaian',
-                    DB::raw('CAST(pre.mutu AS DECIMAL(10,2)) as mutu')
-                )
-                ->orderBy('mutu', 'desc')
-                ->get();
+            $chunks = array_chunk($nims, 100);
 
-            // 2. Ambil nilai terbaik (mutu tertinggi) untuk setiap mata kuliah
-            $bestGrades = $allGrades->unique('id_matakuliah');
+            // Fetch predikat nilai once and cache as dictionary
+            $allPredikat = DB::table('akd_predikat_nilai_huruf')->get();
+            $mutuDict = [];
+            foreach ($allPredikat as $p) {
+                $mutuDict[$p->kode_nilai][$p->nilai_huruf_akhir] = floatval($p->mutu);
+            }
 
-            foreach ($bestGrades as $row) {
-                // Check if already exists in transkrip
-                $existing = DB::table('akd_transkrip')
-                    ->where('nim', $row->nim)
-                    ->where('id_matakuliah', $row->id_matakuliah)
-                    ->first();
+            foreach ($chunks as $chunk) {
+                // 1. Ambil data nilai dari KRS beserta bobotnya (mutu) untuk seluruh nim dalam chunk
+                $allGrades = DB::table('akd_detail_krs as dk')
+                    ->join('akd_kelas_kuliah as c', 'dk.id_kelas', '=', 'c.id_kelas')
+                    ->join('akd_penawaran_matakuliah as p', 'c.id_tawar', '=', 'p.id_tawar')
+                    ->join('akd_matakuliah as m', 'p.id_matakuliah', '=', 'm.id_matakuliah')
+                    ->join('akd_krs as k', 'dk.id_krs', '=', 'k.id_krs')
+                    ->join('akd_heregistrasi as h', 'k.id_heregistrasi', '=', 'h.id_heregistrasi')
+                    ->join('akd_mahasiswa as mhs', 'h.nim', '=', 'mhs.nim')
+                    ->join('akd_predikat_nilai_huruf as pre', function ($join) {
+                        $join->on('dk.nilai_akhir_huruf', '=', 'pre.nilai_huruf_akhir')
+                            ->on('mhs.kode_penilaian', '=', 'pre.kode_nilai');
+                    })
+                    ->whereIn('h.nim', $chunk)
+                    ->whereNotNull('dk.nilai_akhir_huruf')
+                    ->where('dk.nilai_akhir_huruf', '!=', '')
+                    ->select(
+                        'h.nim',
+                        'p.id_matakuliah',
+                        'dk.nilai_akhir_huruf as nilai',
+                        'm.tahun_kurikulum',
+                        'mhs.kode_penilaian',
+                        DB::raw('CAST(pre.mutu AS DECIMAL(10,2)) as mutu')
+                    )
+                    ->orderBy('mutu', 'desc')
+                    ->get();
 
-                if ($existing) {
-                    // Ambil bobot (mutu) nilai yang sudah ada di transkrip untuk perbandingan
-                    $existingMutu = DB::table('akd_predikat_nilai_huruf')
-                        ->where('nilai_huruf_akhir', $existing->nilai)
-                        ->where('kode_nilai', $row->kode_penilaian)
-                        ->value(DB::raw('CAST(mutu AS DECIMAL(10,2))')) ?? 0;
+                $groupedByNim = $allGrades->groupBy('nim');
 
-                    // Update jika nilai dari KRS lebih baik (bobot mutu lebih tinggi)
-                    if ($row->mutu > $existingMutu) {
-                        DB::table('akd_transkrip')
-                            ->where('id_transkrip', $existing->id_transkrip)
-                            ->update([
+                // 2. Ambil data transkrip yang sudah ada untuk chunk ini
+                $existingTranskrip = DB::table('akd_transkrip')
+                    ->whereIn('nim', $chunk)
+                    ->get()
+                    ->groupBy('nim');
+
+                foreach ($groupedByNim as $nim => $grades) {
+                    // Ambil nilai terbaik (mutu tertinggi) untuk setiap mata kuliah
+                    $bestGrades = $grades->unique('id_matakuliah');
+                    $studentExisting = $existingTranskrip->get($nim, collect([]))->keyBy('id_matakuliah');
+
+                    foreach ($bestGrades as $row) {
+                        $existing = $studentExisting->get($row->id_matakuliah);
+
+                        if ($existing) {
+                            $existingMutu = $mutuDict[$row->kode_penilaian][$existing->nilai] ?? 0;
+
+                            if ($row->mutu > $existingMutu) {
+                                DB::table('akd_transkrip')
+                                    ->where('id_transkrip', $existing->id_transkrip)
+                                    ->update([
+                                        'nilai' => $row->nilai,
+                                        'updated_at' => now()
+                                    ]);
+                            }
+                        } else {
+                            DB::table('akd_transkrip')->insert([
+                                'nim' => $row->nim,
+                                'id_matakuliah' => $row->id_matakuliah,
+                                'tahun_kurikulum' => $row->tahun_kurikulum,
                                 'nilai' => $row->nilai,
+                                'created_at' => now(),
                                 'updated_at' => now()
                             ]);
+                        }
                     }
-                } else {
-                    // Insert new
-                    DB::table('akd_transkrip')->insert([
-                        'nim' => $row->nim,
-                        'id_matakuliah' => $row->id_matakuliah,
-                        'tahun_kurikulum' => $row->tahun_kurikulum,
-                        'nilai' => $row->nilai,
-                        'created_at' => now(),
-                        'updated_at' => now()
-                    ]);
                 }
             }
 
@@ -702,6 +732,55 @@ class Akademik extends Controller
         $home_kalenderakademik = $this->akademik->home_kalenderakademikbase($request);
         return $home_kalenderakademik;
     }
+    public function dashboard_stats(Request $request)
+    {
+        $total_mahasiswa = DB::table('akd_mahasiswa')->where('trash', 0)->count();
+        $total_dosen = DB::table('akd_penawaran_matakuliah')->distinct('kode_dosen')->count('kode_dosen');
+        if ($total_dosen == 0) {
+            $total_dosen = DB::table('akd_dosen')->count();
+        }
+        $total_prodi = DB::table('akd_program_studi')->count();
+        $total_matakuliah = DB::table('akd_matakuliah')->count();
+
+        $sebaran = DB::table('akd_mahasiswa')
+            ->join('akd_program_studi', 'akd_mahasiswa.kode_program_studi', '=', 'akd_program_studi.kode_program_studi')
+            ->select('akd_program_studi.nama_program_studi', DB::raw('count(akd_mahasiswa.id_mhs) as total'))
+            ->where('akd_mahasiswa.trash', 0)
+            ->groupBy('akd_program_studi.nama_program_studi')
+            ->orderBy('total', 'desc')
+            ->get();
+
+        $tahun = $request->input('tahun');
+        $semester = $request->input('semester');
+
+        $aktif_registrasi = 0;
+        if ($tahun && $semester) {
+            $aktif_registrasi = DB::table('akd_heregistrasi')
+                ->where('tahun', $tahun)
+                ->where('semester', $semester)
+                ->count();
+        } else {
+            $latest_ta = DB::table('akd_mreg')->orderBy('tahun', 'desc')->orderBy('semester', 'desc')->first();
+            if ($latest_ta) {
+                $aktif_registrasi = DB::table('akd_heregistrasi')
+                    ->where('tahun', $latest_ta->tahun)
+                    ->where('semester', $latest_ta->semester)
+                    ->count();
+            }
+        }
+
+        $belum_registrasi = max(0, $total_mahasiswa - $aktif_registrasi);
+
+        return response()->json([
+            'total_mahasiswa' => $total_mahasiswa,
+            'total_dosen' => $total_dosen,
+            'total_prodi' => $total_prodi,
+            'total_matakuliah' => $total_matakuliah,
+            'sebaran_mahasiswa' => $sebaran,
+            'aktif_registrasi' => $aktif_registrasi,
+            'belum_registrasi' => $belum_registrasi
+        ], 200);
+    }
 
     public function change_session_tahunakademik(Request $request)
     {
@@ -938,6 +1017,18 @@ class Akademik extends Controller
 
     public function data_makulpenawaran(Request $request)
     {
+        $username = $request->header('username');
+        if ($username) {
+            $dos = DB::connection('mysql')->table('user_dosen')
+                ->join('simpeg_pegawai', 'user_dosen.id_pegawai', '=', 'simpeg_pegawai.id')
+                ->join('akd_program_studi', 'simpeg_pegawai.kode_prodi', '=', 'akd_program_studi.kode_program_studi')
+                ->where('user_dosen.email_login', $username)
+                ->select('akd_program_studi.nama_program_studi')
+                ->first();
+            if ($dos && $request->tipe !== 'Dosen') {
+                $request->merge(['nama_program_studi' => $dos->nama_program_studi]);
+            }
+        }
         $makulpenawaran = $this->akademik->data_makulpenawaran($request);
         return $makulpenawaran;
     }
@@ -1288,6 +1379,8 @@ class Akademik extends Controller
             'eta_sks_minimal' => $request->eta_sks_minimal === '' ? null : $request->eta_sks_minimal,
             'eta_ada_sempro' => $etaSempro,
             'eta_komponen_bayar' => $request->eta_komponen_bayar === '' ? null : $request->eta_komponen_bayar,
+            'eta_komponen_bayar_ujian' => $request->eta_komponen_bayar_ujian === '' ? null : $request->eta_komponen_bayar_ujian,
+            'eta_is_obe' => $request->eta_is_obe === '' ? null : $request->eta_is_obe,
             'eta_minimal_bimbingan' => $minBimbingan === '' ? null : $minBimbingan,
         ]);
         
@@ -1300,7 +1393,9 @@ class Akademik extends Controller
             'enama_program_studi' => 'required',
             'eta_sks_minimal' => 'nullable|integer|min:0',
             'eta_ada_sempro' => 'nullable|integer|in:0,1',
+            'eta_is_obe' => 'nullable|integer|in:0,1',
             'eta_komponen_bayar' => 'nullable|string',
+            'eta_komponen_bayar_ujian' => 'nullable|string',
             'eta_minimal_bimbingan' => 'nullable|integer|min:0'
         ]);
 
@@ -1387,6 +1482,16 @@ class Akademik extends Controller
     }
     public function select_kurikulum(Request $request)
     {
+        $username = $request->header('username');
+        if ($username) {
+            $dos = DB::connection('mysql')->table('user_dosen')
+                ->join('simpeg_pegawai', 'user_dosen.id_pegawai', '=', 'simpeg_pegawai.id')
+                ->where('user_dosen.email_login', $username)
+                ->first();
+            if ($dos) {
+                $request->merge(['kode_prodi' => $dos->kode_prodi]);
+            }
+        }
         $select2_kurikulum = $this->akademik->select_kurikulum($request);
         return $select2_kurikulum;
     }
@@ -1536,12 +1641,22 @@ class Akademik extends Controller
             ]);
         return $ubahstatuskalenderakademik;
     }
-    // Mata Kuliah
-    public function matakuliah()
+    public function matakuliah(Request $request)
     {
-        $datamatakuliah = $this->akademik->matakuliah();
+        $username = $request->header('username');
+        if ($username) {
+            $dos = DB::connection('mysql')->table('user_dosen')
+                ->join('simpeg_pegawai', 'user_dosen.id_pegawai', '=', 'simpeg_pegawai.id')
+                ->where('user_dosen.email_login', $username)
+                ->first();
+            if ($dos) {
+                $request->merge(['kode_prodi' => $dos->kode_prodi]);
+            }
+        }
+        $datamatakuliah = $this->akademik->matakuliah($request);
         return $datamatakuliah;
     }
+
 
     public function simpan_matakuliah(Request $request)
     {

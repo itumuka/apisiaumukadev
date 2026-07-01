@@ -69,14 +69,14 @@ class NilaiUASImport implements ToCollection, WithStartRow
                     ->where('id_matakuliah', $row[12])
                     ->where('tahun_kurikulum', $row[13])
                     ->update([
-                        'nilai' => $row[10]
+                        'nilai' => $nilaiAkhirHuruf
                     ]);
             } else {
                 DB::table('akd_transkrip')->insert([
                     'nim' => $row[0],
                     'id_matakuliah' => $row[12],
                     'tahun_kurikulum' => $row[13],
-                    'nilai' => $row[10]
+                    'nilai' => $nilaiAkhirHuruf
                 ]);
             }
         }

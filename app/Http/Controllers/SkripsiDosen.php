@@ -65,13 +65,24 @@ class SkripsiDosen extends Controller
         if ($v->fails()) return response()->json(['error' => $v->errors()], 422);
 
         // Update Log
+        $updateData = [
+            'status' => $request->status,
+            'catatan_dosen' => $request->catatan_dosen,
+            'updated_at' => now()
+        ];
+
+        if ($request->status === 'disetujui') {
+            $existing = DB::table('akd_skripsi_bimbingan')->where('id', $request->id_log)->first();
+            if ($existing && empty($existing->valid_id)) {
+                $updateData['valid_id'] = uniqid('bimb_', true);
+            }
+        } else {
+            $updateData['valid_id'] = null;
+        }
+
         DB::table('akd_skripsi_bimbingan')
             ->where('id', $request->id_log)
-            ->update([
-                'status' => $request->status,
-                'catatan_dosen' => $request->catatan_dosen,
-                'updated_at' => now()
-            ]);
+            ->update($updateData);
 
         return response()->json(['success' => 'Status Bimbingan Berhasil Diperbarui']);
     }
@@ -122,33 +133,41 @@ class SkripsiDosen extends Controller
                 ]);
 
         } else if ($request->fase == 'ujian') {
-            // Update akd_skripsi_ujian
-            // Jika ACC=1, status menjadi 'pending' (siap untuk dijadwalkan)
-            // Jika ACC=0, status tetap atau direset
-            $newStatus = $status_acc ? 'pending' : 'pending';
-            
             // Check if ujian record exists
             $ujian = DB::table('akd_skripsi_ujian')
                 ->where('id_skripsi', $request->id_skripsi)
                 ->where('nim', $nim)
                 ->first();
             
-            if ($ujian) {
-                DB::table('akd_skripsi_ujian')
-                    ->where('id', $ujian->id)
-                    ->update([
+            if ($status_acc) {
+                // Berikan ACC Ujian
+                $newStatus = 'pending';
+                if ($ujian) {
+                    if (in_array($ujian->status, ['pending', 'revisi'])) {
+                        DB::table('akd_skripsi_ujian')
+                            ->where('id', $ujian->id)
+                            ->update([
+                                'status' => $newStatus,
+                                'updated_at' => now()
+                            ]);
+                    }
+                } else {
+                    DB::table('akd_skripsi_ujian')->insert([
+                        'nim' => $nim,
+                        'id_skripsi' => $request->id_skripsi,
                         'status' => $newStatus,
+                        'created_at' => now(),
                         'updated_at' => now()
                     ]);
+                }
             } else {
-                // Create new ujian record if not exists
-                DB::table('akd_skripsi_ujian')->insert([
-                    'nim' => $nim,
-                    'id_skripsi' => $request->id_skripsi,
-                    'status' => $newStatus,
-                    'created_at' => now(),
-                    'updated_at' => now()
-                ]);
+                // Cabut ACC Ujian
+                if ($ujian) {
+                    if (!in_array($ujian->status, ['pending', 'revisi'])) {
+                        return response()->json(['error' => 'Pendaftaran ujian sudah diajukan atau dijadwalkan, tidak dapat membatalkan persetujuan.'], 400);
+                    }
+                    DB::table('akd_skripsi_ujian')->where('id', $ujian->id)->delete();
+                }
             }
         }
 
@@ -172,6 +191,7 @@ class SkripsiDosen extends Controller
             ->leftJoin('simpeg_pegawai as peg1', 'u.id_penguji1', '=', 'peg1.id')
             ->leftJoin('simpeg_pegawai as peg2', 'u.id_penguji2', '=', 'peg2.id')
             ->leftJoin('simpeg_pegawai as peg3', 'u.id_penguji3', '=', 'peg3.id')
+            ->leftJoin('akd_skripsi_luaran as l', 's.id', '=', 'l.id_skripsi')
             ->select(
                 'u.id as id_skripsi_ujian',
                 'u.id_skripsi',
@@ -181,6 +201,32 @@ class SkripsiDosen extends Controller
                 's.judul',
                 's.target_luaran',
                 DB::raw("CASE WHEN s.target_luaran IS NOT NULL AND s.target_luaran != 'buku_skripsi' THEN 1 ELSE 0 END as is_obe"),
+                DB::raw("CASE 
+                    WHEN s.target_luaran IS NOT NULL AND s.target_luaran != 'buku_skripsi' THEN 1 
+                    WHEN (SELECT COUNT(id) FROM akd_skripsi_nilai_cpmk WHERE id_skripsi_ujian = u.id AND id_cpmk > 0) > 0 THEN 1
+                    WHEN (SELECT COUNT(id) FROM akd_skripsi_nilai_cpmk WHERE id_skripsi_ujian = u.id AND id_cpmk = 0) > 0 THEN 0
+                    ELSE COALESCE(
+                        (SELECT mk.cpmk_based 
+                         FROM akd_detail_krs dk
+                         JOIN akd_kelas_kuliah kk ON dk.id_kelas = kk.id_kelas
+                         JOIN akd_penawaran_matakuliah pm ON kk.id_tawar = pm.id_tawar
+                         JOIN akd_matakuliah mk ON pm.id_matakuliah = mk.id_matakuliah
+                         JOIN akd_krs k ON dk.id_krs = k.id_krs
+                         JOIN akd_heregistrasi h ON k.id_heregistrasi = h.id_heregistrasi
+                         WHERE h.nim = u.nim 
+                           AND h.krs = 1
+                           AND (mk.nama_matakuliah LIKE '%Skripsi%' OR mk.nama_matakuliah LIKE '%Tugas Akhir%' OR mk.nama_matakuliah LIKE '%Laporan Tugas Akhir%')
+                           AND mk.nama_matakuliah NOT LIKE '%proposal%'
+                         LIMIT 1),
+                        (SELECT cpmk_based 
+                         FROM akd_matakuliah 
+                         WHERE kode_program_studi = m.kode_program_studi 
+                           AND (nama_matakuliah LIKE '%Skripsi%' OR nama_matakuliah LIKE '%Tugas Akhir%' OR nama_matakuliah LIKE '%Laporan Tugas Akhir%') 
+                           AND nama_matakuliah NOT LIKE '%proposal%' 
+                         LIMIT 1),
+                        1
+                    )
+                END as cpmk_based"),
                 'm.kode_program_studi as kode_prodi',
                 'p.nama_program_studi',
                 'u.tanggal_ujian as tgl_ujian',
@@ -194,7 +240,9 @@ class SkripsiDosen extends Controller
                 'u.id_penguji3',
                 DB::raw("CONCAT_WS(' ', peg1.gelar_depan, peg1.nama, peg1.gelar_belakang) as nama_penguji1"),
                 DB::raw("CONCAT_WS(' ', peg2.gelar_depan, peg2.nama, peg2.gelar_belakang) as nama_penguji2"),
-                DB::raw("CONCAT_WS(' ', peg3.gelar_depan, peg3.nama, peg3.gelar_belakang) as nama_penguji3")
+                DB::raw("CONCAT_WS(' ', peg3.gelar_depan, peg3.nama, peg3.gelar_belakang) as nama_penguji3"),
+                'l.url_link',
+                'l.jenis_luaran'
             )
             ->where(function ($query) use ($id_dosen) {
                 $query->where('u.id_penguji1', $id_dosen)
@@ -296,40 +344,110 @@ class SkripsiDosen extends Controller
         $mhs = DB::table('akd_mahasiswa')->where('nim', $ujian->nim)->first();
         $kode_prodi = $mhs ? $mhs->kode_program_studi : null;
 
-        $rubrics_list = collect();
-        if ($kode_prodi) {
-            $rubrics_list = DB::table('akd_skripsi_rubrik_cpmk')
-                ->where('kode_prodi', $kode_prodi)
-                ->get();
-        }
+        // Tentukan apakah bertipe CPMK-Based atau Non-CPMK-Based
+        $is_cpmk_based = true;
+        $skripsi = DB::table('akd_skripsi')->where('id', $ujian->id_skripsi)->first();
+        if ($skripsi && !empty($skripsi->target_luaran) && $skripsi->target_luaran !== 'buku_skripsi') {
+            $is_cpmk_based = true;
+        } else {
+            // Check if there are already CPMK grades or direct grades saved for this exam
+            $has_cpmk_grades = DB::table('akd_skripsi_nilai_cpmk')
+                ->where('id_skripsi_ujian', $id_skripsi_ujian)
+                ->where('id_cpmk', '>', 0)
+                ->exists();
+            $has_direct_grades = DB::table('akd_skripsi_nilai_cpmk')
+                ->where('id_skripsi_ujian', $id_skripsi_ujian)
+                ->where('id_cpmk', 0)
+                ->exists();
 
-        if ($rubrics_list->isEmpty()) {
-            $rubrics_list = DB::table('akd_skripsi_rubrik_cpmk')
-                ->whereNull('kode_prodi')
-                ->get();
-        }
+            if ($has_cpmk_grades) {
+                $is_cpmk_based = true;
+            } elseif ($has_direct_grades) {
+                $is_cpmk_based = false;
+            } else {
+                $mhs_mk = DB::table('akd_detail_krs as dk')
+                    ->join('akd_kelas_kuliah as kk', 'dk.id_kelas', '=', 'kk.id_kelas')
+                    ->join('akd_penawaran_matakuliah as pm', 'kk.id_tawar', '=', 'pm.id_tawar')
+                    ->join('akd_matakuliah as mk', 'pm.id_matakuliah', '=', 'mk.id_matakuliah')
+                    ->join('akd_krs as k', 'dk.id_krs', '=', 'k.id_krs')
+                    ->join('akd_heregistrasi as h', 'k.id_heregistrasi', '=', 'h.id_heregistrasi')
+                    ->where('h.nim', $ujian->nim)
+                    ->where(function($q) {
+                        $q->where('mk.nama_matakuliah', 'like', '%Skripsi%')
+                          ->orWhere('mk.nama_matakuliah', 'like', '%Tugas Akhir%')
+                          ->orWhere('mk.nama_matakuliah', 'like', '%Laporan Tugas Akhir%');
+                    })
+                    ->where('mk.nama_matakuliah', 'not like', '%proposal%')
+                    ->select('mk.cpmk_based')
+                    ->first();
 
-        $rubrics = $rubrics_list->keyBy('id');
+                if (!$mhs_mk && $kode_prodi) {
+                    $mhs_mk = DB::table('akd_matakuliah')
+                        ->where('kode_program_studi', $kode_prodi)
+                        ->where(function($q) {
+                            $q->where('nama_matakuliah', 'like', '%Skripsi%')
+                              ->orWhere('nama_matakuliah', 'like', '%Tugas Akhir%')
+                              ->orWhere('nama_matakuliah', 'like', '%Laporan Tugas Akhir%');
+                        })
+                        ->where('nama_matakuliah', 'not like', '%proposal%')
+                        ->select('cpmk_based')
+                        ->first();
+                }
+
+                if ($mhs_mk) {
+                    $is_cpmk_based = $mhs_mk->cpmk_based == 1;
+                }
+            }
+        }
 
         $examiner_scores = [];
-        foreach ($examiners as $ex_id) {
-            $scores = DB::table('akd_skripsi_nilai_cpmk')
-                ->where('id_skripsi_ujian', $id_skripsi_ujian)
-                ->where('id_dosen', $ex_id)
-                ->get();
+        if ($is_cpmk_based) {
+            $rubrics_list = collect();
+            if ($kode_prodi) {
+                $rubrics_list = DB::table('akd_skripsi_rubrik_cpmk')
+                    ->where('kode_prodi', $kode_prodi)
+                    ->get();
+            }
 
-            if ($scores->count() > 0) {
-                $weighted_sum = 0;
-                $ex_weight = 0;
-                foreach ($scores as $s) {
-                    if (isset($rubrics[$s->id_cpmk])) {
-                        $w = $rubrics[$s->id_cpmk]->bobot;
-                        $weighted_sum += $s->nilai * $w;
-                        $ex_weight += $w;
+            if ($rubrics_list->isEmpty()) {
+                $rubrics_list = DB::table('akd_skripsi_rubrik_cpmk')
+                    ->whereNull('kode_prodi')
+                    ->get();
+            }
+
+            $rubrics = $rubrics_list->keyBy('id');
+
+            foreach ($examiners as $ex_id) {
+                $scores = DB::table('akd_skripsi_nilai_cpmk')
+                    ->where('id_skripsi_ujian', $id_skripsi_ujian)
+                    ->where('id_dosen', $ex_id)
+                    ->get();
+
+                if ($scores->count() > 0) {
+                    $weighted_sum = 0;
+                    $ex_weight = 0;
+                    foreach ($scores as $s) {
+                        if (isset($rubrics[$s->id_cpmk])) {
+                            $w = $rubrics[$s->id_cpmk]->bobot;
+                            $weighted_sum += $s->nilai * $w;
+                            $ex_weight += $w;
+                        }
+                    }
+                    if ($ex_weight > 0) {
+                        $examiner_scores[] = $weighted_sum / $ex_weight;
                     }
                 }
-                if ($ex_weight > 0) {
-                    $examiner_scores[] = $weighted_sum / $ex_weight;
+            }
+        } else {
+            // Non-OBE grading (direct score stored in id_cpmk = 0)
+            foreach ($examiners as $ex_id) {
+                $score_row = DB::table('akd_skripsi_nilai_cpmk')
+                    ->where('id_skripsi_ujian', $id_skripsi_ujian)
+                    ->where('id_dosen', $ex_id)
+                    ->where('id_cpmk', 0)
+                    ->first();
+                if ($score_row) {
+                    $examiner_scores[] = floatval($score_row->nilai);
                 }
             }
         }
@@ -459,9 +577,9 @@ class SkripsiDosen extends Controller
             ->where('id_skripsi_ujian', $id_skripsi_ujian)
             ->first();
 
-        // Ambil nilai per CPMK dari semua penguji
+        // Ambil nilai per CPMK dari semua penguji (leftJoin untuk mendukung Non-OBE id_cpmk = 0)
         $nilai_cpmk = DB::table('akd_skripsi_nilai_cpmk as nc')
-            ->join('akd_skripsi_rubrik_cpmk as r', 'nc.id_cpmk', '=', 'r.id')
+            ->leftJoin('akd_skripsi_rubrik_cpmk as r', 'nc.id_cpmk', '=', 'r.id')
             ->select('nc.*', 'r.kode_cpmk', 'r.nama_cpmk', 'r.bobot')
             ->where('nc.id_skripsi_ujian', $id_skripsi_ujian)
             ->get();

@@ -21,6 +21,7 @@ class Mskripsi extends Model
             ->where('nim', $nim)->first();
 
         $skripsi = DB::table('akd_skripsi')->where('nim', $nim)->first();
+        $is_obe = $skripsi && !empty($skripsi->target_luaran) && $skripsi->target_luaran !== 'buku_skripsi';
         $flag_pkkmb = 0;
         try {
             $flag_pkkmb = DB::table('akd_pkkmb')->where('nim', $nim)->where('status_lulus', 1)->count() > 0 ? 1 : 0;
@@ -61,7 +62,7 @@ class Mskripsi extends Model
         if (in_array($fase, ['sempro', 'ujian']) && $prodiConfig) {
             $total_bimbingan_valid = DB::table('akd_skripsi_bimbingan')
                 ->where('nim', $nim)
-                ->whereIn('status', ['disetujui', 'revisi'])
+                ->whereIn('status', ['disetujui', 'disetujui_kaprodi', 'disetujui_dekan', 'revisi'])
                 ->count();
         }
         
@@ -195,22 +196,71 @@ class Mskripsi extends Model
                     'tipe_upload' => null,
                     'kode_syarat' => 'BIMBINGAN_8X'
                 ];
+
+                $ujian_acc = $skripsi ? DB::table('akd_skripsi_ujian')
+                    ->where('id_skripsi', $skripsi->id)
+                    ->where('nim', $nim)
+                    ->whereIn('status', ['pending', 'diajukan', 'disetujui', 'dijadwalkan', 'dinilai', 'menunggu_penetapan', 'ditetapkan', 'lulus'])
+                    ->exists() : false;
+
+                $hasil[] = [
+                    'no' => $index++,
+                    'id_syarat_prodi' => null,
+                    'syarat' => 'Persetujuan Ujian dari Dosen Pembimbing (ACC Ujian)',
+                    'isi' => $ujian_acc ? 'Sudah Disetujui' : 'Belum Disetujui',
+                    'hubungi' => 'Dosen Pembimbing',
+                    'status' => $ujian_acc ? 'v' : 'x',
+                    'jenis' => 'sistem',
+                    'is_wajib' => 1,
+                    'tipe_upload' => null,
+                    'kode_syarat' => 'ACC_UJIAN'
+                ];
+                if (!$ujian_acc) $semua_lolos = false;
             }
             
             if ($fase == 'ujian' && $prodiConfig->ta_komponen_bayar_ujian) {
-                $bayar_ujian = DB::table('keu_tagihan')
+                $hasFullScholarship = DB::table('keu_beasiswa_mahasiswa as bm')
+                    ->join('keu_sumber_beasiswa as s', 'bm.id_sumber_beasiswa', '=', 's.id_sumber_beasiswa')
+                    ->where('bm.nim', $nim)
+                    ->where('bm.status_aktif', 1)
+                    ->where('s.jenis_beasiswa', 'full')
+                    ->exists();
+
+                $hasUjianScholarship = $hasFullScholarship || DB::table('keu_beasiswa_mahasiswa as bm')
+                    ->join('keu_beasiswa_cakupan as bc', 'bm.id_sumber_beasiswa', '=', 'bc.id_sumber_beasiswa')
+                    ->where('bm.nim', $nim)
+                    ->where('bm.status_aktif', 1)
+                    ->where('bc.persentase_potongan', 100.00)
+                    ->where(function($q) use ($prodiConfig) {
+                        $q->where('bc.kode_komponen', 'like', '%' . $prodiConfig->ta_komponen_bayar_ujian . '%')
+                          ->orWhere('bc.kode_komponen', 'like', '%Ujian%');
+                    })
+                    ->exists();
+
+                $cekta = DB::table('akd_mreg')->where('trash', '1')->first();
+                $hasDispensasi = false;
+                if ($cekta) {
+                    $hasDispensasi = DB::table('akd_dispensasi')
+                        ->where('nim', $nim)
+                        ->where('tahun', $cekta->tahun)
+                        ->where('semester', $cekta->semester)
+                        ->where('jenis', 'SKRIPSI')
+                        ->exists();
+                }
+
+                $bayar_ujian = $hasDispensasi || $hasUjianScholarship || (DB::table('keu_tagihan')
                     ->where('nim', $nim)
                     ->where('nama_biaya', 'like', '%' . $prodiConfig->ta_komponen_bayar_ujian . '%')
                     ->where('status', '1')
-                    ->count() > 0;
+                    ->count() > 0);
                 
-                if (!$bayar_ujian) $semua_lolos = false;
+                if (!$bayar_ujian && !$is_obe) $semua_lolos = false;
                 
                 $hasil[] = [
                     'no' => $index++,
                     'id_syarat_prodi' => null,
                     'syarat' => 'Pembayaran Biaya Ujian Skripsi',
-                    'isi' => $bayar_ujian ? 'Sudah Lunas' : 'Belum Lunas',
+                    'isi' => $hasDispensasi ? 'Sudah Lunas (Dispensasi)' : ($bayar_ujian ? 'Sudah Lunas' : 'Belum Lunas'),
                     'hubungi' => 'Bagian Keuangan',
                     'status' => $bayar_ujian ? 'v' : 'x',
                     'jenis' => 'pembayaran',
@@ -229,7 +279,7 @@ class Mskripsi extends Model
                         ->where('kode_program_studi', $mhs->kode_program_studi)
                         ->select('ta_sempro_skema', 'ta_sempro_is_validated')
                         ->first();
-                    if ($prodiInfo && $prodiInfo->ta_sempro_skema === 'matakuliah' && $prodiInfo->ta_sempro_is_validated == 1) {
+                    if ($prodiInfo && $prodiInfo->ta_sempro_skema === 'matakuliah') {
                         $isSemproMatakuliah = true;
                     }
                 }
@@ -302,7 +352,7 @@ class Mskripsi extends Model
                         ->where('kode_program_studi', $mhs->kode_program_studi)
                         ->select('ta_sempro_skema', 'ta_sempro_is_validated')
                         ->first();
-                    if ($prodiInfo && $prodiInfo->ta_sempro_skema === 'matakuliah' && $prodiInfo->ta_sempro_is_validated == 1) {
+                    if ($prodiInfo && $prodiInfo->ta_sempro_skema === 'matakuliah') {
                         $isSemproMatakuliah = true;
                     }
 
@@ -321,7 +371,7 @@ class Mskripsi extends Model
                 else if ($rule->kode_syarat == 'BIMBINGAN_ACC') {
                     $bimbingan_valid = DB::table('akd_skripsi_bimbingan')
                         ->where('nim', $nim)
-                        ->whereIn('status', ['disetujui', 'revisi'])
+                        ->whereIn('status', ['disetujui', 'disetujui_kaprodi', 'disetujui_dekan', 'revisi'])
                         ->count();
                     $target_bimbingan = is_numeric($rule->nilai_target) ? (float)$rule->nilai_target : ($fase == 'ujian' ? 8 : (float) ($prodiConfig->ta_minimal_bimbingan ?? 0));
                     if ($target_bimbingan <= 0) {
@@ -334,7 +384,7 @@ class Mskripsi extends Model
                 else if ($rule->kode_syarat == 'BIMBINGAN_8X') {
                     $bimbingan_valid = DB::table('akd_skripsi_bimbingan')
                         ->where('nim', $nim)
-                        ->whereIn('status', ['disetujui', 'revisi'])
+                        ->whereIn('status', ['disetujui', 'disetujui_kaprodi', 'disetujui_dekan', 'revisi'])
                         ->count();
                     $isi_aktual = $bimbingan_valid . ' / 8 Log Bimbingan Tervalidasi (ACC/Revisi)';
                     $is_terpenuhi = $bimbingan_valid >= 8;
@@ -356,6 +406,15 @@ class Mskripsi extends Model
                     $isi_aktual = 'Tidak Perlu ACC';
                     $is_terpenuhi = true;
                 }
+                else if ($rule->kode_syarat == 'ACC_UJIAN') {
+                    $ujian_acc = $skripsi ? DB::table('akd_skripsi_ujian')
+                        ->where('id_skripsi', $skripsi->id)
+                        ->where('nim', $nim)
+                        ->whereIn('status', ['pending', 'diajukan', 'disetujui', 'dijadwalkan', 'dinilai', 'menunggu_penetapan', 'ditetapkan', 'lulus'])
+                        ->exists() : false;
+                    $isi_aktual = $ujian_acc ? 'Sudah Disetujui' : 'Belum Disetujui';
+                    $is_terpenuhi = $ujian_acc;
+                }
 
                 $status_ikon = $is_terpenuhi ? 'v' : 'x';
             }
@@ -369,13 +428,45 @@ class Mskripsi extends Model
                     $nama_biaya = $rule->nilai_target ?: ($fase == 'sempro' ? 'Bimbingan Skripsi' : 'Ujian Skripsi');
                 }
                 
-                $cek_tagihan = DB::table('keu_tagihan')
+                $hasFullScholarship = DB::table('keu_beasiswa_mahasiswa as bm')
+                    ->join('keu_sumber_beasiswa as s', 'bm.id_sumber_beasiswa', '=', 's.id_sumber_beasiswa')
+                    ->where('bm.nim', $nim)
+                    ->where('bm.status_aktif', 1)
+                    ->where('s.jenis_beasiswa', 'full')
+                    ->exists();
+
+                $hasScholarship = $hasFullScholarship || DB::table('keu_beasiswa_mahasiswa as bm')
+                    ->join('keu_beasiswa_cakupan as bc', 'bm.id_sumber_beasiswa', '=', 'bc.id_sumber_beasiswa')
+                    ->where('bm.nim', $nim)
+                    ->where('bm.status_aktif', 1)
+                    ->where('bc.persentase_potongan', 100.00)
+                    ->where(function($q) use ($nama_biaya) {
+                        $q->where('bc.kode_komponen', 'like', '%' . $nama_biaya . '%')
+                          ->orWhere('bc.kode_komponen', 'like', '%Skripsi%')
+                          ->orWhere('bc.kode_komponen', 'like', '%Tugas Akhir%')
+                          ->orWhere('bc.kode_komponen', 'like', '%TA%')
+                          ->orWhere('bc.kode_komponen', 'like', '%Ujian%');
+                    })
+                    ->exists();
+
+                $cekta = DB::table('akd_mreg')->where('trash', '1')->first();
+                $hasDispensasi = false;
+                if ($cekta) {
+                    $hasDispensasi = DB::table('akd_dispensasi')
+                        ->where('nim', $nim)
+                        ->where('tahun', $cekta->tahun)
+                        ->where('semester', $cekta->semester)
+                        ->where('jenis', 'SKRIPSI')
+                        ->exists();
+                }
+
+                $cek_tagihan = $hasDispensasi || $hasScholarship || (DB::table('keu_tagihan')
                     ->where('nim', $nim)
                     ->where('nama_biaya', 'like', '%' . $nama_biaya . '%')
                     ->where('status', '1')
-                    ->count();
-                $isi_aktual = $cek_tagihan > 0 ? 'Sudah Lunas' : 'Belum Lunas';
-                $is_terpenuhi = $cek_tagihan > 0;
+                    ->count() > 0);
+                $isi_aktual = $hasDispensasi ? 'Sudah Lunas (Dispensasi)' : ($cek_tagihan ? 'Sudah Lunas' : 'Belum Lunas');
+                $is_terpenuhi = $cek_tagihan;
                 $status_ikon = $is_terpenuhi ? 'v' : 'x';
             }
             else if ($rule->jenis == 'berkas') {
@@ -396,7 +487,13 @@ class Mskripsi extends Model
                 }
             }
 
-            if (!$is_terpenuhi && $rule->is_wajib == 1) {
+            $isUjianPayment = $rule->kode_syarat === 'BAYAR_UJIAN' || 
+                              ($rule->jenis === 'pembayaran' && $rule->nama_syarat && 
+                               (strpos(strtolower($rule->nama_syarat), 'ujian') !== false || 
+                                strpos(strtolower($rule->nama_syarat), 'skripsi') !== false || 
+                                strpos(strtolower($rule->nama_syarat), 'tugas akhir') !== false));
+            
+            if (!$is_terpenuhi && $rule->is_wajib == 1 && !($isUjianPayment && $is_obe)) {
                 $semua_lolos = false;
             }
 
@@ -493,7 +590,7 @@ class Mskripsi extends Model
             ->select('m.nim', 'm.nama_mahasiswa', 'm.kode_program_studi', 'p.nama_program_studi', 'p.kode_jenjang_pendidikan',
                      'p.ta_sks_minimal', 'p.ta_ada_sempro', 'p.ta_minimal_bimbingan', 
                      'p.ta_komponen_bayar', 'p.ta_komponen_bayar_ujian', 'p.ta_nama_tugas_akhir',
-                     'p.ta_sempro_skema', 'p.ta_sempro_is_validated')
+                     'p.ta_sempro_skema', 'p.ta_sempro_is_validated', 'p.ta_is_obe')
             ->where('m.nim', $nim)->first();
 
         if (!$mhs) return ['error' => 'Data Mahasiswa atau Program Studi tidak sinkron.'];
@@ -501,17 +598,66 @@ class Mskripsi extends Model
         // 2. Stats Akademik
         $stats = $this->getAcademicStats($nim);
 
-        $bayar_ta = ($mhs->ta_komponen_bayar) ? DB::table('keu_tagihan')
+        $cekta = DB::table('akd_mreg')->where('trash', '1')->first();
+        $hasDispensasi = false;
+        if ($cekta) {
+            $hasDispensasi = DB::table('akd_dispensasi')
+                ->where('nim', $nim)
+                ->where('tahun', $cekta->tahun)
+                ->where('semester', $cekta->semester)
+                ->where('jenis', 'SKRIPSI')
+                ->exists();
+        }
+
+        $hasFullScholarship = DB::table('keu_beasiswa_mahasiswa as bm')
+            ->join('keu_sumber_beasiswa as s', 'bm.id_sumber_beasiswa', '=', 's.id_sumber_beasiswa')
+            ->where('bm.nim', $nim)
+            ->where('bm.status_aktif', 1)
+            ->where('s.jenis_beasiswa', 'full')
+            ->exists();
+
+        $hasTaScholarship = $hasFullScholarship || DB::table('keu_beasiswa_mahasiswa as bm')
+            ->join('keu_beasiswa_cakupan as bc', 'bm.id_sumber_beasiswa', '=', 'bc.id_sumber_beasiswa')
+            ->where('bm.nim', $nim)
+            ->where('bm.status_aktif', 1)
+            ->where('bc.persentase_potongan', 100.00)
+            ->where(function($q) use ($mhs) {
+                $q->where('bc.kode_komponen', 'like', '%' . ($mhs->ta_komponen_bayar ?: 'Skripsi') . '%')
+                  ->orWhere('bc.kode_komponen', 'like', '%Skripsi%')
+                  ->orWhere('bc.kode_komponen', 'like', '%Tugas Akhir%')
+                  ->orWhere('bc.kode_komponen', 'like', '%TA%');
+            })
+            ->exists();
+
+        $bayar_ta = $hasDispensasi || $hasTaScholarship || (($mhs->ta_komponen_bayar) ? DB::table('keu_tagihan')
             ->where('nim', $nim)
             ->where('nama_biaya', 'like', '%' . $mhs->ta_komponen_bayar . '%')
             ->where('status', '1')
-            ->count() > 0 : true; // Jika tidak ada komponen biaya, anggap sudah lunas
+            ->count() > 0 : true); // Jika tidak ada komponen biaya, anggap sudah lunas
         
-        $bayar_ujian = ($mhs->ta_komponen_bayar_ujian) ? DB::table('keu_tagihan')
+        $hasFullScholarship = DB::table('keu_beasiswa_mahasiswa as bm')
+            ->join('keu_sumber_beasiswa as s', 'bm.id_sumber_beasiswa', '=', 's.id_sumber_beasiswa')
+            ->where('bm.nim', $nim)
+            ->where('bm.status_aktif', 1)
+            ->where('s.jenis_beasiswa', 'full')
+            ->exists();
+
+        $hasUjianScholarship = $hasFullScholarship || DB::table('keu_beasiswa_mahasiswa as bm')
+            ->join('keu_beasiswa_cakupan as bc', 'bm.id_sumber_beasiswa', '=', 'bc.id_sumber_beasiswa')
+            ->where('bm.nim', $nim)
+            ->where('bm.status_aktif', 1)
+            ->where('bc.persentase_potongan', 100.00)
+            ->where(function($q) use ($mhs) {
+                $q->where('bc.kode_komponen', 'like', '%' . ($mhs->ta_komponen_bayar_ujian ?: 'Ujian') . '%')
+                  ->orWhere('bc.kode_komponen', 'like', '%Ujian%');
+            })
+            ->exists();
+
+        $bayar_ujian = $hasDispensasi || $hasUjianScholarship || (($mhs->ta_komponen_bayar_ujian) ? DB::table('keu_tagihan')
             ->where('nim', $nim)
             ->where('nama_biaya', 'like', '%' . $mhs->ta_komponen_bayar_ujian . '%')
             ->where('status', '1')
-            ->count() > 0 : true;
+            ->count() > 0 : true);
 
         // 4. Data Skripsi Induk
         $skripsi = DB::table('akd_skripsi as s')
@@ -527,7 +673,7 @@ class Mskripsi extends Model
         // 5. Data Sempro & Bimbingan
         $sempro = $skripsi ? DB::table('akd_skripsi_proposal')->where('id_skripsi', $skripsi->id)->where('nim', $nim)->orderBy('iterasi', 'desc')->first() : null;
 
-        $isSemproMatakuliah = $mhs && isset($mhs->ta_sempro_skema) && $mhs->ta_sempro_skema === 'matakuliah' && isset($mhs->ta_sempro_is_validated) && $mhs->ta_sempro_is_validated == 1;
+        $isSemproMatakuliah = $mhs && isset($mhs->ta_sempro_skema) && $mhs->ta_sempro_skema === 'matakuliah';
 
         if ($isSemproMatakuliah) {
             $hasPassedMk = $this->checkSemproByMataKuliahLulus($nim, $mhs->kode_program_studi);
@@ -547,7 +693,7 @@ class Mskripsi extends Model
             }
         }
 
-        $total_bimbingan = $skripsi ? DB::table('akd_skripsi_bimbingan')->where('id_skripsi', $skripsi->id)->whereIn('status', ['disetujui', 'revisi'])->count() : 0;
+        $total_bimbingan = $skripsi ? DB::table('akd_skripsi_bimbingan')->where('id_skripsi', $skripsi->id)->whereIn('status', ['disetujui', 'disetujui_kaprodi', 'disetujui_dekan', 'revisi'])->count() : 0;
 
         // Ambil ujian dengan detail nama penguji (untuk card jadwal di dashboard)
         $ujian = null;
@@ -680,15 +826,30 @@ class Mskripsi extends Model
             return ['label' => 'Menunggu Jadwal & Validasi Sempro', 'url' => '#', 'warna' => 'secondary', 'disabled' => true];
         }
 
-        if ($total_bimbingan >= $min_bimbingan_ujian && !$bayar_ujian) {
-            return ['label' => 'Bimbingan Selesai! Lunasi Biaya Ujian', 'url' => 'mahasiswa/statuspembayaran', 'warna' => 'warning', 'disabled' => false];
+        // Jika ujian sudah ada (dalam tahap apapun) -> jangan tampilkan CTA bayar ujian lagi
+        $ujian_sudah_ada = $ujian && in_array($ujian->status, ['pending', 'diajukan', 'disetujui', 'dijadwalkan', 'dinilai', 'menunggu_penetapan', 'ditetapkan', 'lulus', 'tidak_lulus']);
+
+        $is_obe = ($skripsi && isset($skripsi->is_obe) && $skripsi->is_obe == 1) || (isset($mhs->ta_is_obe) && $mhs->ta_is_obe == 1);
+
+        if (!$ujian_sudah_ada && $total_bimbingan >= $min_bimbingan_ujian) {
+            if ($is_obe || $bayar_ujian) {
+                return ['label' => 'Daftar Ujian Sidang Akhir', 'url' => 'mahasiswa/skripsi/ujian', 'warna' => 'warning', 'disabled' => false];
+            } else {
+                return ['label' => 'Bimbingan Selesai! Lunasi Biaya Ujian', 'url' => 'mahasiswa/statuspembayaran', 'warna' => 'warning', 'disabled' => false];
+            }
         }
 
-        if ($total_bimbingan >= $min_bimbingan_ujian && $bayar_ujian && (!$ujian || $ujian->status == 'pending')) {
-            return ['label' => 'Daftar Ujian Sidang Akhir', 'url' => 'mahasiswa/skripsi/ujian', 'warna' => 'warning', 'disabled' => false];
+        // Ujian sudah ada dengan status pending -> arahkan ke form ujian untuk finalisasi
+        if ($ujian && $ujian->status == 'pending') {
+            return ['label' => 'ACC Dosen Diterima! Selesaikan Pendaftaran Ujian', 'url' => 'mahasiswa/skripsi/ujian', 'warna' => 'warning', 'disabled' => false];
         }
 
-        if ($ujian && $ujian->status == 'dijadwalkan') {
+        // Sudah diajukan, menunggu validasi / penjadwalan kaprodi
+        if ($ujian && $ujian->status == 'diajukan') {
+            return ['label' => 'Pendaftaran Ujian Terkirim – Menunggu Penjadwalan Kaprodi', 'url' => '#', 'warna' => 'info', 'disabled' => true];
+        }
+
+        if ($ujian && in_array($ujian->status, ['disetujui', 'dijadwalkan'])) {
             $today = date('Y-m-d');
             $tgl_ujian = $ujian->tanggal_ujian;
 
@@ -862,13 +1023,15 @@ class Mskripsi extends Model
                 'm.nama_mahasiswa',
                 'p.nama_program_studi',
                 'p.ta_minimal_bimbingan as ta_minimal_bimbingan',
+                'p.ta_ada_sempro',
+                'p.ta_sempro_skema',
                 's.judul',
                 's.topik',
                 's.status as status_skripsi',
                 's.fase_aktif',
                 's.id_dosen_pembimbing1',
                 's.id_dosen_pembimbing2',
-                DB::raw("(SELECT COUNT(id) FROM akd_skripsi_bimbingan b WHERE b.id_skripsi = s.id AND b.status IN ('disetujui', 'revisi')) as total_bimbingan_acc")
+                DB::raw("(SELECT COUNT(id) FROM akd_skripsi_bimbingan b WHERE b.id_skripsi = s.id AND b.status IN ('disetujui', 'disetujui_kaprodi', 'disetujui_dekan', 'revisi')) as total_bimbingan_acc")
             )
             ->where(function ($query) use ($id_dosen) {
                 $query->where('s.id_dosen_pembimbing1', $id_dosen)

@@ -802,6 +802,9 @@ class Mmahasiswa extends Model
         AND akd_heregistrasi.tahun = '" . $request->tahun . "' 
         AND akd_heregistrasi.semester='" . $request->semester . "'");
 
+        if (empty($check_herregistrasi)) {
+            return [];
+        }
         $id_her = $check_herregistrasi[0]->id_heregistrasi;
 
         $revisikrs = DB::select("SELECT hari, CONCAT_WS(' s/d ', TIME_FORMAT(jam_mulai, '%H:%i'), TIME_FORMAT(jam_selesai, '%H:%i')) AS jam, kode_matakuliah, nama_matakuliah, akd_penawaran_matakuliah.sks_matakuliah AS sks, akd_krs.id_krs, akd_kelas_kuliah.id_kelas,

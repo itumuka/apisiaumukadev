@@ -1429,11 +1429,25 @@ class Mmahasiswa extends Model
         $id_mhs = $getid_mhs->id_mhs; // Get user_id from the request
         $id_mreg = $getid_mreg->id_mreg; // Get id_mreg from the request
     
-        $count = DB::table('edom_jawaban')
+        $total_soal = DB::table('edom_soal')->where('id_mreg', $id_mreg)->count();
+
+        if ($total_soal == 0) {
+            return response()->json([
+                'status' => 'completedFilled',
+                'checkingdata' => 'bypass'
+            ], 200);
+        }
+
+        $completedClasses = DB::table('edom_jawaban')
             ->where('user_id', $id_mhs)
             ->where('id_mreg', $id_mreg)
-            ->distinct('id_kelas')
-            ->count('id_kelas');
+            ->select('id_kelas')
+            ->groupBy('id_kelas')
+            ->havingRaw('COUNT(DISTINCT id_soal) >= ?', [$total_soal])
+            ->pluck('id_kelas')
+            ->toArray();
+        
+        $count = count($completedClasses);
     
         // Use the distinct count in your logic
         if ($distinctIdKelasCount <= $count) {

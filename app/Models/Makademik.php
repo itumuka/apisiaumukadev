@@ -3558,8 +3558,20 @@ TIME_FORMAT(jam_mulai, '%H:%i') AS jam_mulai, TIME_FORMAT(jam_selesai, '%H:%i') 
 
 
         $transkipnilai1 = DB::select("SELECT a.*,tb.biji as nilai_huruf_akhir,tb.mutu FROM akd_matakuliah a LEFT JOIN (SELECT MIN(akd_transkrip.nilai) AS biji,akd_transkrip.*,MAX(akd_predikat_nilai_huruf.mutu) AS mutu 
-FROM akd_transkrip,akd_matakuliah,akd_predikat_nilai_huruf WHERE akd_transkrip.nim='" . $request->nim . "' AND akd_transkrip.id_matakuliah=akd_matakuliah.id_matakuliah
-            AND akd_transkrip.nilai=akd_predikat_nilai_huruf.nilai_huruf_akhir GROUP BY akd_matakuliah.id_matakuliah ORDER BY akd_transkrip.id_matakuliah ASC
+FROM akd_transkrip
+JOIN akd_matakuliah ON akd_transkrip.id_matakuliah=akd_matakuliah.id_matakuliah
+JOIN akd_predikat_nilai_huruf ON akd_transkrip.nilai=akd_predikat_nilai_huruf.nilai_huruf_akhir 
+WHERE akd_transkrip.nim='" . $request->nim . "' 
+  AND akd_transkrip.id_matakuliah IN (
+      SELECT DISTINCT pm.id_matakuliah 
+      FROM akd_detail_krs dk
+      JOIN akd_krs k ON dk.id_krs=k.id_krs
+      JOIN akd_heregistrasi h ON k.id_heregistrasi=h.id_heregistrasi
+      JOIN akd_kelas_kuliah kk ON dk.id_kelas=kk.id_kelas
+      JOIN akd_penawaran_matakuliah pm ON kk.id_tawar=pm.id_tawar
+      WHERE h.nim='" . $request->nim . "'
+  )
+GROUP BY akd_matakuliah.id_matakuliah ORDER BY akd_transkrip.id_matakuliah ASC
 ) AS tb ON a.id_matakuliah=tb.id_matakuliah WHERE a.tahun_kurikulum='$kur' AND a.kode_program_studi='$prodi' ORDER BY a.id_matakuliah");
 
 

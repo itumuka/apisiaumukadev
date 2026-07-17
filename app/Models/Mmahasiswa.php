@@ -1116,6 +1116,15 @@ class Mmahasiswa extends Model
         JOIN akd_matakuliah ON akd_matakuliah.id_matakuliah = akd_transkrip.id_matakuliah 
         JOIN akd_predikat_nilai_huruf ON akd_transkrip.nilai = akd_predikat_nilai_huruf.nilai_huruf_akhir 
         WHERE akd_transkrip.nim ='" . $request->nim . "' 
+          AND akd_transkrip.id_matakuliah IN (
+              SELECT DISTINCT pm.id_matakuliah 
+              FROM akd_detail_krs dk
+              JOIN akd_krs k ON dk.id_krs=k.id_krs
+              JOIN akd_heregistrasi h ON k.id_heregistrasi=h.id_heregistrasi
+              JOIN akd_kelas_kuliah kk ON dk.id_kelas=kk.id_kelas
+              JOIN akd_penawaran_matakuliah pm ON kk.id_tawar=pm.id_tawar
+              WHERE h.nim='" . $request->nim . "'
+          )
         GROUP BY akd_transkrip.id_matakuliah ORDER BY akd_matakuliah.smt_matakuliah");
 
         return $transkripnilai;

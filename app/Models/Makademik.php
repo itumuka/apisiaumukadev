@@ -667,7 +667,7 @@ class Makademik extends Model
 
     public function getmhs_cetak(Request $request)
     {
-        $getmhs_cetak = collect(DB::select("SELECT a.nim,a.nama_mahasiswa,b.nama_program_studi, b.kode_program_studi, b.kode_jenjang_pendidikan, b.nama_program_studi, nama_fakultas, tahun_angkatan, CONCAT_WS(' ', ds.gelar_depan, ds.nama, ds.gelar_belakang) AS dosen_wali,(SELECT CONCAT(nama) FROM simpeg_pegawai WHERE id=b.pimpinan_prodi) AS namaprodi, CONCAT_WS(' ', ds.gelar_depan, ds.nama, ds.gelar_belakang) AS dosen_wali, ds.nidn AS nidndosene, dq.valid_id AS valididdosenwali, CONCAT_WS(' ', dk.gelar_depan, dk.nama, dk.gelar_belakang) AS dekane, qm_fakultas.valid_id AS valididdekane, dk.nidn AS nidndekane, dp.nama AS namaprodi, qm_prodi.valid_id AS valididprodi, dp.nidn AS nidnprodi
+        $getmhs_cetak = collect(DB::select("SELECT a.nim,a.nama_mahasiswa,b.nama_program_studi, b.kode_program_studi, b.kode_jenjang_pendidikan, b.nama_program_studi, nama_fakultas, tahun_angkatan, CONCAT_WS(' ', ds.gelar_depan, ds.nama, ds.gelar_belakang) AS dosen_wali, CONCAT_WS(' ', dp.gelar_depan, dp.nama, dp.gelar_belakang) AS namaprodi, ds.nidn AS nidndosene, dq.valid_id AS valididdosenwali, CONCAT_WS(' ', dk.gelar_depan, dk.nama, dk.gelar_belakang) AS dekane, qm_fakultas.valid_id AS valididdekane, dk.nidn AS nidndekane, qm_prodi.valid_id AS valididprodi, dp.nidn AS nidnprodi
         FROM akd_mahasiswa a 
         JOIN akd_program_studi b ON a.kode_program_studi=b.kode_program_studi 
         JOIN akd_fakultas c ON c.kode_fakultas=b.kode_fakultas 

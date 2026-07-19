@@ -897,23 +897,41 @@ class SkripsiKaprodi extends Controller
 
         // Validasi bobot jika tipe_bobot adalah 'indikator'
         if ($tipe_bobot === 'indikator') {
-            $total_substansi = 0;
-            $total_ujian = 0;
+            // Fetch dynamic aspects
+            $aspects = DB::table('akd_skripsi_aspek')
+                ->where('kode_prodi', $kode_prodi)
+                ->where('jalur', $jalur)
+                ->get();
+
+            if ($aspects->count() == 0) {
+                // Default fallback if not found
+                $aspects = collect([
+                    (object)['nama_aspek' => 'Substansi dan Luaran', 'bobot' => 60.00],
+                    (object)['nama_aspek' => 'Ujian / Presentasi', 'bobot' => 40.00]
+                ]);
+            }
+
+            $aspectTotals = [];
+            foreach ($aspects as $a) {
+                $aspectTotals[$a->nama_aspek] = 0;
+            }
+
             foreach ($request->rubrik as $r) {
-                $aspek = $r['aspek'] ?? 'substansi';
+                $aspek = $r['aspek'] ?? '';
                 $bobot = floatval($r['bobot'] ?? 0);
-                if ($aspek === 'substansi') {
-                    $total_substansi += $bobot;
+                if (isset($aspectTotals[$aspek])) {
+                    $aspectTotals[$aspek] += $bobot;
                 } else {
-                    $total_ujian += $bobot;
+                    return response()->json(['error' => 'Aspek "' . $aspek . '" tidak terdaftar di Master Aspek Penilaian.'], 422);
                 }
             }
 
-            if (abs($total_substansi - 60.00) > 0.01) {
-                return response()->json(['error' => 'Total bobot indikator aspek Substansi harus tepat 60% (saat ini: ' . $total_substansi . '%)'], 422);
-            }
-            if (abs($total_ujian - 40.00) > 0.01) {
-                return response()->json(['error' => 'Total bobot indikator aspek Ujian harus tepat 40% (saat ini: ' . $total_ujian . '%)'], 422);
+            foreach ($aspects as $a) {
+                $expected = floatval($a->bobot);
+                $actual = $aspectTotals[$a->nama_aspek];
+                if (abs($actual - $expected) > 0.01) {
+                    return response()->json(['error' => 'Total bobot indikator aspek "' . $a->nama_aspek . '" harus tepat ' . $expected . '% (saat ini: ' . $actual . '%)'], 422);
+                }
             }
         }
 
@@ -932,8 +950,8 @@ class SkripsiKaprodi extends Controller
                     'kode_indikator' => $r['kode_indikator'],
                     'nama_indikator' => $r['nama_indikator'],
                     'bobot' => floatval($r['bobot']),
-                    'kkm' => floatval($r['kkm'] ?? 70.00),
-                    'aspek' => $r['aspek'] ?? 'substansi',
+                    'kkm' => 70.00,
+                    'aspek' => $r['aspek'],
                     'jalur' => $jalur,
                     'tipe_bobot' => $tipe_bobot,
                     'kode_prodi' => $kode_prodi,
@@ -981,106 +999,88 @@ class SkripsiKaprodi extends Controller
     }
 
     /**
-     * Master Data CPL - Get CPL for Kaprodi
+     * Master Data Aspek - Get Aspek for Kaprodi
      */
-    public function get_cpl($kode_prodi, Request $request)
+    public function get_aspek($kode_prodi, Request $request)
     {
-        $query = DB::table('akd_cpl')
-            ->where(function ($q) use ($kode_prodi) {
-                $q->where('kode_prodi', $kode_prodi)
-                  ->orWhereNull('kode_prodi');
-            });
-
-        if ($request->has('tahun') && !empty($request->tahun)) {
-            $query->where('tahun_kurikulum', $request->tahun);
-        }
-
-        $cpls = $query->orderBy('tahun_kurikulum', 'desc')
-            ->orderBy('kode_cpl', 'asc')
+        $jalur = $request->query('jalur', 'reguler');
+        $aspeks = DB::table('akd_skripsi_aspek')
+            ->where('kode_prodi', $kode_prodi)
+            ->where('jalur', $jalur)
+            ->orderBy('id', 'asc')
             ->get();
-
-        foreach ($cpls as $c) {
-            // Count how many CPMK uses this CPL for the active prodi
-            $c->jumlah_cpmk = DB::table('akd_skripsi_cpmk_cpl as cc')
-                ->join('akd_skripsi_rubrik_cpmk as r', 'cc.id_cpmk', '=', 'r.id')
-                ->where('r.kode_prodi', $kode_prodi)
-                ->where('cc.kode_cpl', $c->kode_cpl)
-                ->count();
-
-            // Lembaga Pemilik
-            if ($c->level === 'Program Studi') {
-                $c->lembaga_pemilik = DB::table('akd_program_studi')
-                    ->where('kode_program_studi', $c->kode_prodi ?? $kode_prodi)
-                    ->value('nama_program_studi') ?? 'Program Studi';
-            } elseif ($c->level === 'Fakultas') {
-                $c->lembaga_pemilik = 'Fakultas';
-            } else {
-                $c->lembaga_pemilik = 'Universitas';
-            }
-        }
 
         return response()->json([
             'status' => 'success',
-            'data' => $cpls
+            'data' => $aspeks
         ]);
     }
 
     /**
-     * Master Data CPL - Save/Update CPL
+     * Master Data Aspek - Save/Update Aspek
      */
-    public function save_cpl(Request $request)
+    public function save_aspek(Request $request)
     {
         $v = Validator::make($request->all(), [
             'kode_prodi' => 'required',
-            'kode_cpl' => 'required|max:50',
-            'kode_kategori' => 'required|max:100',
-            'deskripsi' => 'required',
-            'tahun_kurikulum' => 'required|max:10',
-            'level' => 'required|in:Program Studi,Fakultas,Universitas',
-            'is_aktif' => 'required'
+            'nama_aspek' => 'required|max:100',
+            'bobot' => 'required|numeric|min:0|max:100',
+            'jalur' => 'required|in:reguler,obe',
         ]);
 
         if ($v->fails()) {
             return response()->json(['error' => $v->errors()->all()], 422);
         }
 
-        $is_aktif = filter_var($request->is_aktif, FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
-        $kode_cpl = strtoupper(trim($request->kode_cpl));
-        $tahun_kurikulum = trim($request->tahun_kurikulum);
         $kode_prodi = $request->kode_prodi;
+        $nama_aspek = trim($request->nama_aspek);
+        $bobot = floatval($request->bobot);
+        $jalur = $request->jalur;
+
+        // Validasi total bobot tidak melebihi 100% jika ditambah aspek ini (untuk aspek baru)
+        $id = $request->id;
+        $query = DB::table('akd_skripsi_aspek')
+            ->where('kode_prodi', $kode_prodi)
+            ->where('jalur', $jalur);
+        if ($id) {
+            $query->where('id', '!=', $id);
+        }
+        $existing_total = $query->sum('bobot');
+        if ($existing_total + $bobot > 100.01) {
+            return response()->json(['error' => 'Total bobot aspek melebihi 100% (Maksimum yang tersisa: ' . (100 - $existing_total) . '%)'], 422);
+        }
 
         $data = [
             'kode_prodi' => $kode_prodi,
-            'kode_cpl' => $kode_cpl,
-            'kode_kategori' => trim($request->kode_kategori),
-            'deskripsi' => trim($request->deskripsi),
-            'tahun_kurikulum' => $tahun_kurikulum,
-            'level' => $request->level,
-            'is_aktif' => $is_aktif,
+            'nama_aspek' => $nama_aspek,
+            'bobot' => $bobot,
+            'jalur' => $jalur,
             'updated_at' => now()
         ];
 
-        if ($request->has('id') && !empty($request->id)) {
-            // Update
-            DB::table('akd_cpl')
-                ->where('id', $request->id)
-                ->update($data);
-            $msg = 'CPL berhasil diperbarui.';
-        } else {
-            // Create - check duplicate first
-            $exists = DB::table('akd_cpl')
-                ->where('kode_prodi', $kode_prodi)
-                ->where('kode_cpl', $kode_cpl)
-                ->where('tahun_kurikulum', $tahun_kurikulum)
-                ->exists();
+        if ($id) {
+            // Get original aspect name
+            $original_name = DB::table('akd_skripsi_aspek')->where('id', $id)->value('nama_aspek');
 
-            if ($exists) {
-                return response()->json(['error' => 'Kode CPL ' . $kode_cpl . ' sudah terdaftar untuk kurikulum ' . $tahun_kurikulum], 422);
+            // Update
+            DB::table('akd_skripsi_aspek')
+                ->where('id', $id)
+                ->update($data);
+
+            // Update aspects in rubrik if renamed
+            if ($original_name && $original_name !== $nama_aspek) {
+                DB::table('akd_skripsi_rubrik_indikator')
+                    ->where('kode_prodi', $kode_prodi)
+                    ->where('jalur', $jalur)
+                    ->where('aspek', $original_name)
+                    ->update(['aspek' => $nama_aspek]);
             }
 
+            $msg = 'Aspek penilaian berhasil diperbarui.';
+        } else {
             $data['created_at'] = now();
-            DB::table('akd_cpl')->insert($data);
-            $msg = 'CPL berhasil ditambahkan.';
+            DB::table('akd_skripsi_aspek')->insert($data);
+            $msg = 'Aspek penilaian berhasil ditambahkan.';
         }
 
         return response()->json([
@@ -1090,54 +1090,82 @@ class SkripsiKaprodi extends Controller
     }
 
     /**
-     * Master Data CPL - Delete CPL
+     * Master Data Aspek - Delete Aspek
      */
-    public function delete_cpl($id, Request $request)
+    public function delete_aspek($id, Request $request)
     {
-        $cpl = DB::table('akd_cpl')->where('id', $id)->first();
-        if (!$cpl) {
-            return response()->json(['error' => 'CPL tidak ditemukan.'], 404);
+        $aspek = DB::table('akd_skripsi_aspek')->where('id', $id)->first();
+        if (!$aspek) {
+            return response()->json(['error' => 'Aspek tidak ditemukan.'], 404);
         }
 
-        // Check if CPL is mapped to any CPMK for this prodi
-        $mappedCount = DB::table('akd_skripsi_cpmk_cpl as cc')
-            ->join('akd_skripsi_rubrik_cpmk as r', 'cc.id_cpmk', '=', 'r.id')
-            ->where('r.kode_prodi', $cpl->kode_prodi)
-            ->where('cc.kode_cpl', $cpl->kode_cpl)
-            ->count();
+        // Check if there are indicators using this aspect
+        $hasIndicators = DB::table('akd_skripsi_rubrik_indikator')
+            ->where('kode_prodi', $aspek->kode_prodi)
+            ->where('jalur', $aspek->jalur)
+            ->where('aspek', $aspek->nama_aspek)
+            ->exists();
 
-        if ($mappedCount > 0) {
-            return response()->json(['error' => 'CPL ' . $cpl->kode_cpl . ' tidak dapat dihapus karena sedang dipetakan ke ' . $mappedCount . ' CPMK.'], 422);
+        if ($hasIndicators) {
+            return response()->json(['error' => 'Aspek "' . $aspek->nama_aspek . '" tidak dapat dihapus karena masih digunakan oleh indikator penilaian.'], 422);
         }
 
-        DB::table('akd_cpl')->where('id', $id)->delete();
+        DB::table('akd_skripsi_aspek')->where('id', $id)->delete();
 
         return response()->json([
             'status' => 'success',
-            'message' => 'CPL berhasil dihapus.'
+            'message' => 'Aspek penilaian berhasil dihapus.'
         ]);
     }
 
     /**
-     * Master Data CPL - Toggle Active Status
+     * Master Data Aspek - Reset Aspek to Default
      */
-    public function toggle_cpl($id, Request $request)
+    public function reset_aspek(Request $request)
     {
-        $cpl = DB::table('akd_cpl')->where('id', $id)->first();
-        if (!$cpl) {
-            return response()->json(['error' => 'CPL tidak ditemukan.'], 404);
+        $v = Validator::make($request->all(), [
+            'kode_prodi' => 'required',
+            'jalur' => 'required|in:reguler,obe',
+        ]);
+
+        if ($v->fails()) return response()->json(['error' => $v->errors()->all()], 422);
+
+        $kode_prodi = $request->kode_prodi;
+        $jalur = $request->jalur;
+
+        DB::beginTransaction();
+        try {
+            DB::table('akd_skripsi_aspek')
+                ->where('kode_prodi', $kode_prodi)
+                ->where('jalur', $jalur)
+                ->delete();
+
+            // Insert defaults
+            DB::table('akd_skripsi_aspek')->insert([
+                [
+                    'kode_prodi' => $kode_prodi,
+                    'nama_aspek' => 'Substansi dan Luaran',
+                    'bobot' => 60.00,
+                    'jalur' => $jalur,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ],
+                [
+                    'kode_prodi' => $kode_prodi,
+                    'nama_aspek' => 'Ujian / Presentasi',
+                    'bobot' => 40.00,
+                    'jalur' => $jalur,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]
+            ]);
+
+            DB::commit();
+            return response()->json(['status' => 'success', 'message' => 'Aspek penilaian berhasil direset ke default.']);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => $e->getMessage()], 500);
         }
-
-        $newStatus = $cpl->is_aktif ? 0 : 1;
-        DB::table('akd_cpl')->where('id', $id)->update([
-            'is_aktif' => $newStatus,
-            'updated_at' => now()
-        ]);
-
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Status aktif CPL berhasil diperbarui.'
-        ]);
     }
 
     /**

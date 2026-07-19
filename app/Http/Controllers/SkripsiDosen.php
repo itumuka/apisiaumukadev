@@ -379,6 +379,20 @@ class SkripsiDosen extends Controller
             );
         }
 
+        // Fetch dynamic aspects
+        $aspects = DB::table('akd_skripsi_aspek')
+            ->where('kode_prodi', $mhs->kode_program_studi ?? '')
+            ->where('jalur', $ujian->is_obe == 1 ? 'obe' : 'reguler')
+            ->get()
+            ->keyBy('nama_aspek');
+
+        if ($aspects->count() == 0) {
+            $aspects = collect([
+                'Substansi dan Luaran' => (object)['nama_aspek' => 'Substansi dan Luaran', 'bobot' => 60.00],
+                'Ujian / Presentasi' => (object)['nama_aspek' => 'Ujian / Presentasi', 'bobot' => 40.00]
+            ]);
+        }
+
         // Kalkulasi ulang nilai akhir ujian dari semua penguji
         $examiners = array_filter([$ujian->id_penguji1, $ujian->id_penguji2, $ujian->id_penguji3]);
         $examiner_scores = [];
@@ -396,21 +410,26 @@ class SkripsiDosen extends Controller
                 $tipe_bobot = $first_score->tipe_bobot_snapshot ?? ($rubrics_list->first()->tipe_bobot ?? 'indikator');
 
                 if ($tipe_bobot === 'tunggal') {
-                    // Opsi Tunggal (Taut Aspek) -> Rata-rata Substansi 60%, Rata-rata Ujian 40%
-                    $substansi_scores = [];
-                    $ujian_scores = [];
+                    // Opsi Tunggal (Taut Aspek) -> Rata-rata per aspek terbobot
+                    $grouped_scores = [];
                     foreach ($scores as $s) {
-                        $aspek = $s->aspek_snapshot ?? (isset($rubrics[$s->id_rubrik_indikator]) ? $rubrics[$s->id_rubrik_indikator]->aspek : 'substansi');
-                        if ($aspek === 'substansi') {
-                            $substansi_scores[] = floatval($s->nilai);
-                        } else {
-                            $ujian_scores[] = floatval($s->nilai);
+                        $aspek = $s->aspek_snapshot ?? (isset($rubrics[$s->id_rubrik_indikator]) ? $rubrics[$s->id_rubrik_indikator]->aspek : 'Substansi dan Luaran');
+                        $matched_aspek = $aspek;
+                        foreach ($aspects as $name => $aspectObj) {
+                            if (strcasecmp($name, $aspek) === 0) {
+                                $matched_aspek = $name;
+                                break;
+                            }
                         }
+                        $grouped_scores[$matched_aspek][] = floatval($s->nilai);
                     }
-                    $avg_substansi = count($substansi_scores) > 0 ? (array_sum($substansi_scores) / count($substansi_scores)) : 0;
-                    $avg_ujian = count($ujian_scores) > 0 ? (array_sum($ujian_scores) / count($ujian_scores)) : 0;
-                    
-                    $ex_score = ($avg_substansi * 0.6) + ($avg_ujian * 0.4);
+
+                    $ex_score = 0;
+                    foreach ($grouped_scores as $aspName => $valArray) {
+                        $avg = count($valArray) > 0 ? (array_sum($valArray) / count($valArray)) : 0;
+                        $w = isset($aspects[$aspName]) ? floatval($aspects[$aspName]->bobot) : (str_contains(strtolower($aspName), 'ujian') ? 40.00 : 60.00);
+                        $ex_score += $avg * ($w / 100);
+                    }
                     $examiner_scores[] = $ex_score;
                 } else {
                     // Opsi Per Indikator -> Weighted sum
@@ -577,6 +596,12 @@ class SkripsiDosen extends Controller
             ->where('nc.id_skripsi_ujian', $id_skripsi_ujian)
             ->get();
 
+        // Ambil aspek penilaian untuk program studi ini
+        $aspek = DB::table('akd_skripsi_aspek')
+            ->where('kode_prodi', $ujian->kode_prodi ?? '')
+            ->where('jalur', $ujian->is_obe == 1 ? 'obe' : 'reguler')
+            ->get();
+
         return response()->json([
             'status' => 'success',
             'data' => [
@@ -584,6 +609,7 @@ class SkripsiDosen extends Controller
                 'berita_acara'    => $ba,
                 'nilai_indikator' => $nilai_indikator,
                 'nilai_cpmk'      => $nilai_indikator, // compatibility fallback
+                'aspek'           => $aspek,
                 'is_penguji'      => $is_penguji,
                 'peran_saya'      => $id_dosen ? (($id_dosen == $ujian->id_penguji1) ? 'penguji1' :
                                        (($id_dosen == $ujian->id_penguji2) ? 'penguji2' : 'penguji3')) : 'kaprodi',

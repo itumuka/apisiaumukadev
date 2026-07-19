@@ -448,10 +448,10 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::get("/kaprodi/skripsi/get-rubrik-indikator/{kode_prodi}", "SkripsiKaprodi@get_rubrik_indikator")->name('skripsi_kaprodi_get_rubrik_indikator');
     Route::post("/kaprodi/skripsi/save-rubrik-indikator", "SkripsiKaprodi@save_rubrik_indikator")->name('skripsi_kaprodi_save_rubrik_indikator');
     Route::post("/kaprodi/skripsi/reset-rubrik-indikator", "SkripsiKaprodi@reset_rubrik_indikator")->name('skripsi_kaprodi_reset_rubrik_indikator');
-    Route::get("/kaprodi/skripsi/get-cpl/{kode_prodi}", "SkripsiKaprodi@get_cpl")->name('skripsi_kaprodi_get_cpl');
-    Route::post("/kaprodi/skripsi/save-cpl", "SkripsiKaprodi@save_cpl")->name('skripsi_kaprodi_save_cpl');
-    Route::post("/kaprodi/skripsi/delete-cpl/{id}", "SkripsiKaprodi@delete_cpl")->name('skripsi_kaprodi_delete_cpl');
-    Route::post("/kaprodi/skripsi/toggle-cpl/{id}", "SkripsiKaprodi@toggle_cpl")->name('skripsi_kaprodi_toggle_cpl');
+    Route::get("/kaprodi/skripsi/get-aspek/{kode_prodi}", "SkripsiKaprodi@get_aspek")->name('skripsi_kaprodi_get_aspek');
+    Route::post("/kaprodi/skripsi/save-aspek", "SkripsiKaprodi@save_aspek")->name('skripsi_kaprodi_save_aspek');
+    Route::post("/kaprodi/skripsi/delete-aspek/{id}", "SkripsiKaprodi@delete_aspek")->name('skripsi_kaprodi_delete_aspek');
+    Route::post("/kaprodi/skripsi/reset-aspek", "SkripsiKaprodi@reset_aspek")->name('skripsi_kaprodi_reset_aspek');
     Route::get("/kaprodi/skripsi/search-matakuliah", "SkripsiKaprodi@search_matakuliah")->name('skripsi_kaprodi_search_matakuliah');
     Route::get("/kaprodi/skripsi/syarat-prodi/{kode_prodi}", "SkripsiKaprodi@list_syarat_prodi")->name('skripsi_kaprodi_list_syarat');
     Route::get("/kaprodi/skripsi/master-syarat", "SkripsiKaprodi@list_master_syarat")->name('skripsi_kaprodi_master_syarat');

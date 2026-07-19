@@ -851,30 +851,24 @@ class SkripsiKaprodi extends Controller
     }
 
     /**
-     * Get CPMK Rubrics for Kaprodi Config
+     * Get Indikator Rubrics for Kaprodi Config
      */
-    public function get_rubrik_cpmk($kode_prodi)
+    public function get_rubrik_indikator($kode_prodi, Request $request)
     {
-        $rows = DB::table('akd_skripsi_rubrik_cpmk')
+        $jalur = $request->query('jalur', 'reguler');
+        $rows = DB::table('akd_skripsi_rubrik_indikator')
             ->where('kode_prodi', $kode_prodi)
-            ->orderBy('kode_cpmk', 'asc')
+            ->where('jalur', $jalur)
+            ->orderBy('kode_indikator', 'asc')
             ->get();
 
         // If empty, fetch default ones (where kode_prodi is null)
         if ($rows->count() == 0) {
-            $rows = DB::table('akd_skripsi_rubrik_cpmk')
+            $rows = DB::table('akd_skripsi_rubrik_indikator')
                 ->whereNull('kode_prodi')
-                ->orderBy('kode_cpmk', 'asc')
+                ->where('jalur', $jalur)
+                ->orderBy('kode_indikator', 'asc')
                 ->get();
-        }
-
-        // Include mapped CPLs for each CPMK (supporting comma separated multi-CPL)
-        foreach ($rows as $r) {
-            $cpls = DB::table('akd_skripsi_cpmk_cpl')
-                ->where('id_cpmk', $r->id)
-                ->pluck('kode_cpl')
-                ->toArray();
-            $r->kode_cpl = implode(', ', $cpls);
         }
 
         return response()->json([
@@ -884,96 +878,102 @@ class SkripsiKaprodi extends Controller
     }
 
     /**
-     * Save CPMK Rubrics Config for Kaprodi
+     * Save Indikator Rubrics Config for Kaprodi
      */
-    public function save_rubrik_cpmk(Request $request)
+    public function save_rubrik_indikator(Request $request)
     {
         $v = Validator::make($request->all(), [
             'kode_prodi' => 'required',
-            'rubrik' => 'required|array', // array of { id_cpmk/new, kode_cpmk, nama_cpmk, bobot, kkm, kode_cpl }
+            'jalur' => 'required|in:reguler,obe',
+            'tipe_bobot' => 'required|in:tunggal,indikator',
+            'rubrik' => 'required|array', // array of { id, kode_indikator, nama_indikator, bobot, kkm, aspek }
         ]);
 
         if ($v->fails()) return response()->json(['error' => $v->errors()->all()], 422);
 
         $kode_prodi = $request->kode_prodi;
-        $total_bobot = 0;
-        foreach ($request->rubrik as $r) {
-            $total_bobot += floatval($r['bobot'] ?? 0);
-        }
+        $jalur = $request->jalur;
+        $tipe_bobot = $request->tipe_bobot;
 
-        if (abs($total_bobot - 100.00) > 0.01) {
-            return response()->json(['error' => 'Total bobot rubrik harus tepat 100% (saat ini: ' . $total_bobot . '%)'], 422);
+        // Validasi bobot jika tipe_bobot adalah 'indikator'
+        if ($tipe_bobot === 'indikator') {
+            $total_substansi = 0;
+            $total_ujian = 0;
+            foreach ($request->rubrik as $r) {
+                $aspek = $r['aspek'] ?? 'substansi';
+                $bobot = floatval($r['bobot'] ?? 0);
+                if ($aspek === 'substansi') {
+                    $total_substansi += $bobot;
+                } else {
+                    $total_ujian += $bobot;
+                }
+            }
+
+            if (abs($total_substansi - 60.00) > 0.01) {
+                return response()->json(['error' => 'Total bobot indikator aspek Substansi harus tepat 60% (saat ini: ' . $total_substansi . '%)'], 422);
+            }
+            if (abs($total_ujian - 40.00) > 0.01) {
+                return response()->json(['error' => 'Total bobot indikator aspek Ujian harus tepat 40% (saat ini: ' . $total_ujian . '%)'], 422);
+            }
         }
 
         DB::beginTransaction();
         try {
-            // Drop existing custom rubrics & CPL maps for this prodi
-            $old_rubrics = DB::table('akd_skripsi_rubrik_cpmk')->where('kode_prodi', $kode_prodi)->get();
-            $old_ids = $old_rubrics->pluck('id')->toArray();
-            
-            if (!empty($old_ids)) {
-                DB::table('akd_skripsi_cpmk_cpl')->whereIn('id_cpmk', $old_ids)->delete();
-            }
-            DB::table('akd_skripsi_rubrik_cpmk')->where('kode_prodi', $kode_prodi)->delete();
+            // Hapus rubrik kustom yang lama untuk prodi & jalur ini
+            DB::table('akd_skripsi_rubrik_indikator')
+                ->where('kode_prodi', $kode_prodi)
+                ->where('jalur', $jalur)
+                ->delete();
 
             // Insert new custom rubrics
             $now = now();
             foreach ($request->rubrik as $r) {
-                $id = DB::table('akd_skripsi_rubrik_cpmk')->insertGetId([
-                    'kode_cpmk' => $r['kode_cpmk'],
-                    'nama_cpmk' => $r['nama_cpmk'],
+                DB::table('akd_skripsi_rubrik_indikator')->insert([
+                    'kode_indikator' => $r['kode_indikator'],
+                    'nama_indikator' => $r['nama_indikator'],
                     'bobot' => floatval($r['bobot']),
                     'kkm' => floatval($r['kkm'] ?? 70.00),
+                    'aspek' => $r['aspek'] ?? 'substansi',
+                    'jalur' => $jalur,
+                    'tipe_bobot' => $tipe_bobot,
                     'kode_prodi' => $kode_prodi,
                     'created_at' => $now,
                     'updated_at' => $now
                 ]);
-
-                if (!empty($r['kode_cpl'])) {
-                    $cpl_codes = array_filter(array_map('trim', explode(',', $r['kode_cpl'])));
-                    foreach ($cpl_codes as $cpl_code) {
-                        DB::table('akd_skripsi_cpmk_cpl')->insert([
-                            'id_cpmk' => $id,
-                            'kode_cpl' => $cpl_code,
-                            'created_at' => $now,
-                            'updated_at' => $now
-                        ]);
-                    }
-                }
             }
 
             DB::commit();
-            return response()->json(['success' => 'Rubrik CPMK berhasil disimpan']);
+            return response()->json(['success' => 'Rubrik penilaian berhasil disimpan']);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+
     /**
-     * Reset/Delete CPMK Rubrics for Kaprodi
+     * Reset/Delete Indikator Rubrics for Kaprodi
      */
-    public function reset_rubrik_cpmk(Request $request)
+    public function reset_rubrik_indikator(Request $request)
     {
         $v = Validator::make($request->all(), [
             'kode_prodi' => 'required',
+            'jalur' => 'required|in:reguler,obe',
         ]);
 
         if ($v->fails()) return response()->json(['error' => $v->errors()->all()], 422);
 
         $kode_prodi = $request->kode_prodi;
+        $jalur = $request->jalur;
 
         DB::beginTransaction();
         try {
-            $old_rubrics = DB::table('akd_skripsi_rubrik_cpmk')->where('kode_prodi', $kode_prodi)->get();
-            $old_ids = $old_rubrics->pluck('id')->toArray();
-            
-            if (!empty($old_ids)) {
-                DB::table('akd_skripsi_cpmk_cpl')->whereIn('id_cpmk', $old_ids)->delete();
-            }
-            DB::table('akd_skripsi_rubrik_cpmk')->where('kode_prodi', $kode_prodi)->delete();
+            DB::table('akd_skripsi_rubrik_indikator')
+                ->where('kode_prodi', $kode_prodi)
+                ->where('jalur', $jalur)
+                ->delete();
 
             DB::commit();
-            return response()->json(['success' => 'Rubrik CPMK berhasil direset ke default']);
+            return response()->json(['success' => 'Rubrik penilaian berhasil direset ke default']);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['error' => $e->getMessage()], 500);

@@ -763,8 +763,8 @@ class Skripsi extends Controller
             ]);
         }
 
-        // Ambil nilai per CPMK
-        $scores = DB::table('akd_skripsi_nilai_cpmk')
+        // Ambil nilai per Indikator
+        $scores = DB::table('akd_skripsi_nilai_indikator')
             ->where('id_skripsi_ujian', $ujian->id)
             ->get();
 
@@ -783,90 +783,46 @@ class Skripsi extends Controller
         $mhs = DB::table('akd_mahasiswa')->where('nim', $nim)->first();
         $kode_prodi = $mhs ? $mhs->kode_program_studi : null;
 
-        // Check if student's prodi has custom rubrics
-        $hasCustom = false;
-        if ($kode_prodi) {
-            $hasCustom = DB::table('akd_skripsi_rubrik_cpmk')
-                ->where('kode_prodi', $kode_prodi)
-                ->exists();
+        // Tentukan jalur (reguler vs obe)
+        $jalur = 'reguler';
+        if ($skripsi && !empty($skripsi->target_luaran) && $skripsi->target_luaran !== 'buku_skripsi') {
+            $jalur = 'obe';
         }
 
-        // Fetch active CPL descriptions to map in PHP (prevent SQL join duplication)
-        $active_cpls = collect([]);
+        // Ambil kriteria Indikator untuk prodi mahasiswa
+        $rubrics_list = collect();
         if ($kode_prodi) {
-            $active_cpls = DB::table('akd_cpl')
-                ->where('is_aktif', 1)
-                ->where(function ($q) use ($kode_prodi) {
-                    $q->where('kode_prodi', $kode_prodi)
-                      ->orWhereNull('kode_prodi');
-                })
+            $rubrics_list = DB::table('akd_skripsi_rubrik_indikator')
+                ->where('kode_prodi', $kode_prodi)
+                ->where('jalur', $jalur)
                 ->get();
         }
+        if ($rubrics_list->isEmpty()) {
+            $rubrics_list = DB::table('akd_skripsi_rubrik_indikator')
+                ->whereNull('kode_prodi')
+                ->where('jalur', $jalur)
+                ->get();
+        }
+        $rubrics = $rubrics_list->keyBy('id');
 
-        // Ambil kriteria CPMK dan pemetaan CPL (termasuk KKM) untuk prodi mahasiswa
-        $cpmk_cpl = DB::table('akd_skripsi_cpmk_cpl as cc')
-            ->join('akd_skripsi_rubrik_cpmk as r', 'cc.id_cpmk', '=', 'r.id')
-            ->select('cc.kode_cpl', 'r.id as id_cpmk', 'r.kode_cpmk', 'r.nama_cpmk', 'r.kkm')
-            ->where(function ($query) use ($kode_prodi, $hasCustom) {
-                if ($hasCustom) {
-                    $query->where('r.kode_prodi', $kode_prodi);
-                } else {
-                    $query->whereNull('r.kode_prodi');
-                }
-            })
-            ->get();
-
-        // Map CPL description in PHP
-        foreach ($cpmk_cpl as $item) {
-            $cpl_match = null;
-            if ($active_cpls->isNotEmpty()) {
-                // Prioritize prodi-specific CPL over global/null CPL
-                $cpl_match = $active_cpls->where('kode_cpl', $item->kode_cpl)->where('kode_prodi', $kode_prodi)->first();
-                if (!$cpl_match) {
-                    $cpl_match = $active_cpls->where('kode_cpl', $item->kode_cpl)->first();
-                }
-            }
-            $item->cpl_deskripsi = $cpl_match ? $cpl_match->deskripsi : '';
+        // Hitung rata-rata nilai per Indikator dari semua penguji/verifikator
+        $indicator_averages = [];
+        $grouped_scores = $scores->groupBy('id_rubrik_indikator');
+        foreach ($grouped_scores as $rubrik_id => $rubrik_scores) {
+            $indicator_averages[$rubrik_id] = $rubrik_scores->avg('nilai');
         }
 
-        // Hitung rata-rata nilai per CPMK dari semua penguji/verifikator
-        $cpmk_averages = [];
-        $grouped_scores = $scores->groupBy('id_cpmk');
-        foreach ($grouped_scores as $cpmk_id => $cpmk_scores) {
-            $cpmk_averages[$cpmk_id] = $cpmk_scores->avg('nilai');
-        }
+        $scores_formatted = [];
+        foreach ($indicator_averages as $rubrik_id => $avg) {
+            $s_row = $grouped_scores->get($rubrik_id)->first();
+            $nama_ind = $s_row->nama_indikator_snapshot ?? (isset($rubrics[$rubrik_id]) ? $rubrics[$rubrik_id]->nama_indikator : 'Kriteria ' . $rubrik_id);
+            $kode_ind = isset($rubrics[$rubrik_id]) ? $rubrics[$rubrik_id]->kode_indikator : '';
+            $kkm = isset($rubrics[$rubrik_id]) ? (float)$rubrics[$rubrik_id]->kkm : 70.00;
 
-        // Group by CPL dan hitung pencapaian
-        $cpl_achievements = [];
-        $cpl_groups = $cpmk_cpl->groupBy('kode_cpl');
-        foreach ($cpl_groups as $cpl_code => $mappings) {
-            $sum = 0;
-            $count = 0;
-            foreach ($mappings as $m) {
-                if (isset($cpmk_averages[$m->id_cpmk])) {
-                    $sum += $cpmk_averages[$m->id_cpmk];
-                    $count++;
-                }
-            }
-            if ($count > 0) {
-                $achievement = round($sum / $count, 2);
-                $cpl_achievements[] = [
-                    'cpl' => $cpl_code,
-                    'deskripsi' => $mappings->first()->cpl_deskripsi ?? '',
-                    'achievement' => $achievement,
-                    'status' => $achievement >= 70.00 ? 'Tercapai' : 'Perlu Penguatan'
-                ];
-            }
-        }
-
-        $cpmk_scores_formatted = [];
-        foreach ($cpmk_averages as $cpmk_id => $avg) {
-            $item = $cpmk_cpl->firstWhere('id_cpmk', $cpmk_id);
-            $kkm = $item ? (float)$item->kkm : 70.00;
-            $cpmk_scores_formatted[] = [
-                'id_cpmk' => $cpmk_id,
-                'kode_cpmk' => $item ? $item->kode_cpmk : '',
-                'nama_cpmk' => $item ? $item->nama_cpmk : 'Kriteria ' . $cpmk_id,
+            $scores_formatted[] = [
+                'id_cpmk' => $rubrik_id,
+                'kode_cpmk' => $kode_ind,
+                'nama_cpmk' => $nama_ind,
                 'nilai' => round($avg, 2),
                 'kkm' => $kkm,
                 'status' => round($avg, 2) >= $kkm ? 'Lulus' : 'Belum Lulus'
@@ -879,8 +835,8 @@ class Skripsi extends Controller
                 'nilai_angka' => $ujian->nilai_angka,
                 'nilai_ujian' => $ujian->nilai_ujian,
                 'status_ujian' => $ujian->status,
-                'cpl_portfolio' => $cpl_achievements,
-                'cpmk_scores' => $cpmk_scores_formatted
+                'cpl_portfolio' => [],
+                'cpmk_scores' => $scores_formatted
             ]
         ]);
     }

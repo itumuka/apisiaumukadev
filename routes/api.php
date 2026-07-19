@@ -445,9 +445,9 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::post("/kaprodi/skripsi/update-config-grading", "SkripsiKaprodi@update_grading_config")->name('skripsi_kaprodi_update_config_grading');
     Route::get("/kaprodi/skripsi/config-sempro/{kode_prodi}", "SkripsiKaprodi@get_config_sempro")->name('skripsi_kaprodi_get_config_sempro');
     Route::post("/kaprodi/skripsi/update-config-sempro", "SkripsiKaprodi@update_config_sempro")->name('skripsi_kaprodi_update_config_sempro');
-    Route::get("/kaprodi/skripsi/get-rubrik-cpmk/{kode_prodi}", "SkripsiKaprodi@get_rubrik_cpmk")->name('skripsi_kaprodi_get_rubrik_cpmk');
-    Route::post("/kaprodi/skripsi/save-rubrik-cpmk", "SkripsiKaprodi@save_rubrik_cpmk")->name('skripsi_kaprodi_save_rubrik_cpmk');
-    Route::post("/kaprodi/skripsi/reset-rubrik-cpmk", "SkripsiKaprodi@reset_rubrik_cpmk")->name('skripsi_kaprodi_reset_rubrik_cpmk');
+    Route::get("/kaprodi/skripsi/get-rubrik-indikator/{kode_prodi}", "SkripsiKaprodi@get_rubrik_indikator")->name('skripsi_kaprodi_get_rubrik_indikator');
+    Route::post("/kaprodi/skripsi/save-rubrik-indikator", "SkripsiKaprodi@save_rubrik_indikator")->name('skripsi_kaprodi_save_rubrik_indikator');
+    Route::post("/kaprodi/skripsi/reset-rubrik-indikator", "SkripsiKaprodi@reset_rubrik_indikator")->name('skripsi_kaprodi_reset_rubrik_indikator');
     Route::get("/kaprodi/skripsi/get-cpl/{kode_prodi}", "SkripsiKaprodi@get_cpl")->name('skripsi_kaprodi_get_cpl');
     Route::post("/kaprodi/skripsi/save-cpl", "SkripsiKaprodi@save_cpl")->name('skripsi_kaprodi_save_cpl');
     Route::post("/kaprodi/skripsi/delete-cpl/{id}", "SkripsiKaprodi@delete_cpl")->name('skripsi_kaprodi_delete_cpl');
@@ -467,9 +467,9 @@ Route::middleware(['jwtverifie'])->group(function () {
 
     // Modul Penilaian Ujian OBE Dosen
     Route::get("/dosen/skripsi/list-mahasiswa-diuji", "SkripsiDosen@list_mahasiswa_diuji")->name('skripsi_dosen_list_mahasiswa_diuji');
-    Route::get("/dosen/skripsi/get-rubrik-cpmk", "SkripsiDosen@get_rubrik_cpmk")->name('skripsi_dosen_get_rubrik_cpmk');
-    Route::get("/dosen/skripsi/get-nilai-ujian-cpmk", "SkripsiDosen@get_nilai_ujian_cpmk")->name('skripsi_dosen_get_nilai_ujian_cpmk');
-    Route::post("/dosen/skripsi/simpan-nilai-ujian-cpmk", "SkripsiDosen@simpan_nilai_ujian_cpmk")->name('skripsi_dosen_simpan_nilai_ujian_cpmk');
+    Route::get("/dosen/skripsi/get-rubrik-indikator", "SkripsiDosen@get_rubrik_indikator")->name('skripsi_dosen_get_rubrik_indikator');
+    Route::get("/dosen/skripsi/get-nilai-ujian-indikator", "SkripsiDosen@get_nilai_ujian_indikator")->name('skripsi_dosen_get_nilai_ujian_indikator');
+    Route::post("/dosen/skripsi/simpan-nilai-ujian-indikator", "SkripsiDosen@simpan_nilai_ujian_indikator")->name('skripsi_dosen_simpan_nilai_ujian_indikator');
 
     // Berita Acara & Penetapan Ujian
     Route::get("/dosen/skripsi/berita-acara/{id_skripsi_ujian}", "SkripsiDosen@get_berita_acara")->name('skripsi_dosen_get_berita_acara');

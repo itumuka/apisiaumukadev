@@ -261,24 +261,27 @@ class SkripsiDosen extends Controller
     }
 
     /**
-     * Ambil Rubrik CPMK untuk Penilaian OBE
+     * Ambil Rubrik Indikator untuk Penilaian (OBE / Reguler)
      */
-    public function get_rubrik_cpmk(Request $request)
+    public function get_rubrik_indikator(Request $request)
     {
         $kode_prodi = $request->kode_prodi;
+        $jalur = $request->query('jalur', 'reguler');
         
         $rows = collect();
         if ($kode_prodi) {
-            $rows = DB::table('akd_skripsi_rubrik_cpmk')
+            $rows = DB::table('akd_skripsi_rubrik_indikator')
                 ->where('kode_prodi', $kode_prodi)
-                ->orderBy('kode_cpmk', 'asc')
+                ->where('jalur', $jalur)
+                ->orderBy('kode_indikator', 'asc')
                 ->get();
         }
         
         if ($rows->isEmpty()) {
-            $rows = DB::table('akd_skripsi_rubrik_cpmk')
+            $rows = DB::table('akd_skripsi_rubrik_indikator')
                 ->whereNull('kode_prodi')
-                ->orderBy('kode_cpmk', 'asc')
+                ->where('jalur', $jalur)
+                ->orderBy('kode_indikator', 'asc')
                 ->get();
         }
 
@@ -289,9 +292,9 @@ class SkripsiDosen extends Controller
     }
 
     /**
-     * Ambil Nilai Ujian CPMK yang sudah di-input oleh Dosen
+     * Ambil Nilai Ujian Indikator yang sudah di-input oleh Dosen
      */
-    public function get_nilai_ujian_cpmk(Request $request)
+    public function get_nilai_ujian_indikator(Request $request)
     {
         $v = Validator::make($request->all(), [
             'id_skripsi_ujian' => 'required',
@@ -300,7 +303,7 @@ class SkripsiDosen extends Controller
 
         if ($v->fails()) return response()->json(['error' => $v->errors()->all()], 422);
 
-        $rows = DB::table('akd_skripsi_nilai_cpmk')
+        $rows = DB::table('akd_skripsi_nilai_indikator')
             ->where('id_skripsi_ujian', $request->id_skripsi_ujian)
             ->where('id_dosen', $request->id_dosen)
             ->get();
@@ -312,14 +315,14 @@ class SkripsiDosen extends Controller
     }
 
     /**
-     * Simpan Nilai Ujian Per CPMK
+     * Simpan Nilai Ujian Per Indikator
      */
-    public function simpan_nilai_ujian_cpmk(Request $request)
+    public function simpan_nilai_ujian_indikator(Request $request)
     {
         $v = Validator::make($request->all(), [
             'id_skripsi_ujian' => 'required',
             'id_dosen' => 'required',
-            'nilai' => 'required|array', // key is id_cpmk, value is score 0-100
+            'nilai' => 'required|array', // key is id_rubrik_indikator, value is score 0-100
         ]);
 
         if ($v->fails()) return response()->json(['error' => $v->errors()->all()], 422);
@@ -327,127 +330,100 @@ class SkripsiDosen extends Controller
         $id_skripsi_ujian = $request->id_skripsi_ujian;
         $id_dosen = $request->id_dosen;
 
-        // Simpan nilai per CPMK
-        foreach ($request->nilai as $id_cpmk => $score) {
-            DB::table('akd_skripsi_nilai_cpmk')->updateOrInsert(
-                ['id_skripsi_ujian' => $id_skripsi_ujian, 'id_dosen' => $id_dosen, 'id_cpmk' => $id_cpmk],
-                ['nilai' => $score, 'updated_at' => now(), 'created_at' => now()]
-            );
-        }
-
-        // Kalkulasi ulang nilai akhir ujian
         $ujian = DB::table('akd_skripsi_ujian')->where('id', $id_skripsi_ujian)->first();
         if (!$ujian) return response()->json(['error' => 'Data ujian tidak ditemukan.'], 404);
 
-        $examiners = array_filter([$ujian->id_penguji1, $ujian->id_penguji2, $ujian->id_penguji3]);
-        
         $mhs = DB::table('akd_mahasiswa')->where('nim', $ujian->nim)->first();
         $kode_prodi = $mhs ? $mhs->kode_program_studi : null;
 
-        // Tentukan apakah bertipe CPMK-Based atau Non-CPMK-Based
-        $is_cpmk_based = true;
+        // Tentukan jalur (reguler vs obe)
+        $jalur = 'reguler';
         $skripsi = DB::table('akd_skripsi')->where('id', $ujian->id_skripsi)->first();
         if ($skripsi && !empty($skripsi->target_luaran) && $skripsi->target_luaran !== 'buku_skripsi') {
-            $is_cpmk_based = true;
-        } else {
-            // Check if there are already CPMK grades or direct grades saved for this exam
-            $has_cpmk_grades = DB::table('akd_skripsi_nilai_cpmk')
-                ->where('id_skripsi_ujian', $id_skripsi_ujian)
-                ->where('id_cpmk', '>', 0)
-                ->exists();
-            $has_direct_grades = DB::table('akd_skripsi_nilai_cpmk')
-                ->where('id_skripsi_ujian', $id_skripsi_ujian)
-                ->where('id_cpmk', 0)
-                ->exists();
-
-            if ($has_cpmk_grades) {
-                $is_cpmk_based = true;
-            } elseif ($has_direct_grades) {
-                $is_cpmk_based = false;
-            } else {
-                $mhs_mk = DB::table('akd_detail_krs as dk')
-                    ->join('akd_kelas_kuliah as kk', 'dk.id_kelas', '=', 'kk.id_kelas')
-                    ->join('akd_penawaran_matakuliah as pm', 'kk.id_tawar', '=', 'pm.id_tawar')
-                    ->join('akd_matakuliah as mk', 'pm.id_matakuliah', '=', 'mk.id_matakuliah')
-                    ->join('akd_krs as k', 'dk.id_krs', '=', 'k.id_krs')
-                    ->join('akd_heregistrasi as h', 'k.id_heregistrasi', '=', 'h.id_heregistrasi')
-                    ->where('h.nim', $ujian->nim)
-                    ->where(function($q) {
-                        $q->where('mk.nama_matakuliah', 'like', '%Skripsi%')
-                          ->orWhere('mk.nama_matakuliah', 'like', '%Tugas Akhir%')
-                          ->orWhere('mk.nama_matakuliah', 'like', '%Laporan Tugas Akhir%');
-                    })
-                    ->where('mk.nama_matakuliah', 'not like', '%proposal%')
-                    ->select('mk.cpmk_based')
-                    ->first();
-
-                if (!$mhs_mk && $kode_prodi) {
-                    $mhs_mk = DB::table('akd_matakuliah')
-                        ->where('kode_program_studi', $kode_prodi)
-                        ->where(function($q) {
-                            $q->where('nama_matakuliah', 'like', '%Skripsi%')
-                              ->orWhere('nama_matakuliah', 'like', '%Tugas Akhir%')
-                              ->orWhere('nama_matakuliah', 'like', '%Laporan Tugas Akhir%');
-                        })
-                        ->where('nama_matakuliah', 'not like', '%proposal%')
-                        ->select('cpmk_based')
-                        ->first();
-                }
-
-                if ($mhs_mk) {
-                    $is_cpmk_based = $mhs_mk->cpmk_based == 1;
-                }
-            }
+            $jalur = 'obe';
         }
 
+        // Ambil rubrik master aktif untuk mendapatkan meta/snapshot
+        $rubrics_list = collect();
+        if ($kode_prodi) {
+            $rubrics_list = DB::table('akd_skripsi_rubrik_indikator')
+                ->where('kode_prodi', $kode_prodi)
+                ->where('jalur', $jalur)
+                ->get();
+        }
+        if ($rubrics_list->isEmpty()) {
+            $rubrics_list = DB::table('akd_skripsi_rubrik_indikator')
+                ->whereNull('kode_prodi')
+                ->where('jalur', $jalur)
+                ->get();
+        }
+        $rubrics = $rubrics_list->keyBy('id');
+
+        // Simpan nilai per indikator dengan snapshot
+        foreach ($request->nilai as $id_rubrik => $score) {
+            $rubric_meta = $rubrics->get($id_rubrik);
+            
+            $snapshot_data = [
+                'nama_indikator_snapshot' => $rubric_meta ? $rubric_meta->nama_indikator : null,
+                'aspek_snapshot' => $rubric_meta ? $rubric_meta->aspek : null,
+                'bobot_snapshot' => $rubric_meta ? $rubric_meta->bobot : null,
+                'tipe_bobot_snapshot' => $rubric_meta ? $rubric_meta->tipe_bobot : null,
+                'nilai' => $score,
+                'updated_at' => now(),
+                'created_at' => now()
+            ];
+
+            DB::table('akd_skripsi_nilai_indikator')->updateOrInsert(
+                ['id_skripsi_ujian' => $id_skripsi_ujian, 'id_dosen' => $id_dosen, 'id_rubrik_indikator' => $id_rubrik],
+                $snapshot_data
+            );
+        }
+
+        // Kalkulasi ulang nilai akhir ujian dari semua penguji
+        $examiners = array_filter([$ujian->id_penguji1, $ujian->id_penguji2, $ujian->id_penguji3]);
         $examiner_scores = [];
-        if ($is_cpmk_based) {
-            $rubrics_list = collect();
-            if ($kode_prodi) {
-                $rubrics_list = DB::table('akd_skripsi_rubrik_cpmk')
-                    ->where('kode_prodi', $kode_prodi)
-                    ->get();
-            }
 
-            if ($rubrics_list->isEmpty()) {
-                $rubrics_list = DB::table('akd_skripsi_rubrik_cpmk')
-                    ->whereNull('kode_prodi')
-                    ->get();
-            }
+        foreach ($examiners as $ex_id) {
+            // Ambil data nilai yang sudah diinput oleh penguji ini
+            $scores = DB::table('akd_skripsi_nilai_indikator')
+                ->where('id_skripsi_ujian', $id_skripsi_ujian)
+                ->where('id_dosen', $ex_id)
+                ->get();
 
-            $rubrics = $rubrics_list->keyBy('id');
+            if ($scores->count() > 0) {
+                // Gunakan data dari snapshot jika tersedia
+                $first_score = $scores->first();
+                $tipe_bobot = $first_score->tipe_bobot_snapshot ?? ($rubrics_list->first()->tipe_bobot ?? 'indikator');
 
-            foreach ($examiners as $ex_id) {
-                $scores = DB::table('akd_skripsi_nilai_cpmk')
-                    ->where('id_skripsi_ujian', $id_skripsi_ujian)
-                    ->where('id_dosen', $ex_id)
-                    ->get();
-
-                if ($scores->count() > 0) {
+                if ($tipe_bobot === 'tunggal') {
+                    // Opsi Tunggal (Taut Aspek) -> Rata-rata Substansi 60%, Rata-rata Ujian 40%
+                    $substansi_scores = [];
+                    $ujian_scores = [];
+                    foreach ($scores as $s) {
+                        $aspek = $s->aspek_snapshot ?? (isset($rubrics[$s->id_rubrik_indikator]) ? $rubrics[$s->id_rubrik_indikator]->aspek : 'substansi');
+                        if ($aspek === 'substansi') {
+                            $substansi_scores[] = floatval($s->nilai);
+                        } else {
+                            $ujian_scores[] = floatval($s->nilai);
+                        }
+                    }
+                    $avg_substansi = count($substansi_scores) > 0 ? (array_sum($substansi_scores) / count($substansi_scores)) : 0;
+                    $avg_ujian = count($ujian_scores) > 0 ? (array_sum($ujian_scores) / count($ujian_scores)) : 0;
+                    
+                    $ex_score = ($avg_substansi * 0.6) + ($avg_ujian * 0.4);
+                    $examiner_scores[] = $ex_score;
+                } else {
+                    // Opsi Per Indikator -> Weighted sum
                     $weighted_sum = 0;
                     $ex_weight = 0;
                     foreach ($scores as $s) {
-                        if (isset($rubrics[$s->id_cpmk])) {
-                            $w = $rubrics[$s->id_cpmk]->bobot;
-                            $weighted_sum += $s->nilai * $w;
-                            $ex_weight += $w;
-                        }
+                        $w = $s->bobot_snapshot ?? (isset($rubrics[$s->id_rubrik_indikator]) ? floatval($rubrics[$s->id_rubrik_indikator]->bobot) : 0);
+                        $weighted_sum += $s->nilai * $w;
+                        $ex_weight += $w;
                     }
                     if ($ex_weight > 0) {
                         $examiner_scores[] = $weighted_sum / $ex_weight;
                     }
-                }
-            }
-        } else {
-            // Non-OBE grading (direct score stored in id_cpmk = 0)
-            foreach ($examiners as $ex_id) {
-                $score_row = DB::table('akd_skripsi_nilai_cpmk')
-                    ->where('id_skripsi_ujian', $id_skripsi_ujian)
-                    ->where('id_dosen', $ex_id)
-                    ->where('id_cpmk', 0)
-                    ->first();
-                if ($score_row) {
-                    $examiner_scores[] = floatval($score_row->nilai);
                 }
             }
         }
@@ -456,8 +432,7 @@ class SkripsiDosen extends Controller
             $final_numeric_score = array_sum($examiner_scores) / count($examiner_scores);
 
             // Pemetaan predikat huruf dari konfigurasi berdasarkan kode_penilaian mahasiswa
-            $mhs_penilaian = DB::table('akd_mahasiswa')->where('nim', $ujian->nim)->first();
-            $kode_penilaian = $mhs_penilaian ? (int)$mhs_penilaian->kode_penilaian : 1;
+            $kode_penilaian = $mhs ? (int)$mhs->kode_penilaian : 1;
             $rules = config('grades.rules.' . $kode_penilaian, config('grades.rules.1'));
 
             $letter = 'E';
@@ -549,14 +524,26 @@ class SkripsiDosen extends Controller
         $ujian = DB::table('akd_skripsi_ujian as u')
             ->join('akd_skripsi as s', 'u.id_skripsi', '=', 's.id')
             ->join('akd_mahasiswa as m', 'u.nim', '=', 'm.nim')
+            ->leftJoin('akd_program_studi as prodi', 'm.kode_program_studi', '=', 'prodi.kode_program_studi')
+            ->leftJoin('akd_fakultas as fak', 'prodi.kode_fakultas', '=', 'fak.kode_fakultas')
+            ->leftJoin('simpeg_pegawai as kps', 'prodi.pimpinan_prodi', '=', 'kps.id')
+            ->leftJoin('simpeg_pegawai as dekan', 'fak.pimpinan', '=', 'dekan.id')
             ->leftJoin('simpeg_pegawai as p1', 'u.id_penguji1', '=', 'p1.id')
             ->leftJoin('simpeg_pegawai as p2', 'u.id_penguji2', '=', 'p2.id')
             ->leftJoin('simpeg_pegawai as p3', 'u.id_penguji3', '=', 'p3.id')
             ->select(
                 'u.*', 's.judul', 'm.nama_mahasiswa',
+                'prodi.nama_program_studi', 'fak.nama_fakultas',
+                DB::raw("CONCAT_WS(' ', kps.gelar_depan, kps.nama, kps.gelar_belakang) as nama_kaprodi"),
+                'kps.nidn as nidn_kaprodi',
+                DB::raw("CONCAT_WS(' ', dekan.gelar_depan, dekan.nama, dekan.gelar_belakang) as nama_dekan"),
+                'dekan.nidn as nidn_dekan',
                 DB::raw("CONCAT_WS(' ', p1.gelar_depan, p1.nama, p1.gelar_belakang) as nama_penguji1"),
+                'p1.nidn as nidn_penguji1',
                 DB::raw("CONCAT_WS(' ', p2.gelar_depan, p2.nama, p2.gelar_belakang) as nama_penguji2"),
-                DB::raw("CONCAT_WS(' ', p3.gelar_depan, p3.nama, p3.gelar_belakang) as nama_penguji3")
+                'p2.nidn as nidn_penguji2',
+                DB::raw("CONCAT_WS(' ', p3.gelar_depan, p3.nama, p3.gelar_belakang) as nama_penguji3"),
+                'p3.nidn as nidn_penguji3'
             )
             ->where('u.id', $id_skripsi_ujian)
             ->first();
@@ -577,22 +564,29 @@ class SkripsiDosen extends Controller
             ->where('id_skripsi_ujian', $id_skripsi_ujian)
             ->first();
 
-        // Ambil nilai per CPMK dari semua penguji (leftJoin untuk mendukung Non-OBE id_cpmk = 0)
-        $nilai_cpmk = DB::table('akd_skripsi_nilai_cpmk as nc')
-            ->leftJoin('akd_skripsi_rubrik_cpmk as r', 'nc.id_cpmk', '=', 'r.id')
-            ->select('nc.*', 'r.kode_cpmk', 'r.nama_cpmk', 'r.bobot')
+        // Ambil nilai per indikator dari semua penguji (mendukung fallback data historis)
+        $nilai_indikator = DB::table('akd_skripsi_nilai_indikator as nc')
+            ->leftJoin('akd_skripsi_rubrik_indikator as r', 'nc.id_rubrik_indikator', '=', 'r.id')
+            ->select(
+                'nc.*',
+                DB::raw("COALESCE(nc.nama_indikator_snapshot, r.nama_indikator) as nama_indikator"),
+                DB::raw("COALESCE(nc.aspek_snapshot, r.aspek) as aspek"),
+                DB::raw("COALESCE(nc.bobot_snapshot, r.bobot) as bobot"),
+                DB::raw("COALESCE(nc.tipe_bobot_snapshot, r.tipe_bobot) as tipe_bobot")
+            )
             ->where('nc.id_skripsi_ujian', $id_skripsi_ujian)
             ->get();
 
         return response()->json([
             'status' => 'success',
             'data' => [
-                'ujian'     => $ujian,
-                'berita_acara' => $ba,
-                'nilai_cpmk'   => $nilai_cpmk,
-                'is_penguji'   => $is_penguji,
-                'peran_saya'   => $id_dosen ? (($id_dosen == $ujian->id_penguji1) ? 'penguji1' :
-                                   (($id_dosen == $ujian->id_penguji2) ? 'penguji2' : 'penguji3')) : 'kaprodi',
+                'ujian'           => $ujian,
+                'berita_acara'    => $ba,
+                'nilai_indikator' => $nilai_indikator,
+                'nilai_cpmk'      => $nilai_indikator, // compatibility fallback
+                'is_penguji'      => $is_penguji,
+                'peran_saya'      => $id_dosen ? (($id_dosen == $ujian->id_penguji1) ? 'penguji1' :
+                                       (($id_dosen == $ujian->id_penguji2) ? 'penguji2' : 'penguji3')) : 'kaprodi',
             ]
         ]);
     }

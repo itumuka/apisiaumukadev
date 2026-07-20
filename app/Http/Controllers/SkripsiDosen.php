@@ -228,6 +228,18 @@ class SkripsiDosen extends Controller
             ->orderBy('u.tanggal_ujian', 'desc')
             ->get();
 
+        foreach ($rows as $r) {
+            if ($r->id_penguji1 == $id_dosen) {
+                $r->role_dosen = 'penguji1';
+            } elseif ($r->id_penguji2 == $id_dosen) {
+                $r->role_dosen = 'penguji2';
+            } elseif ($r->id_penguji3 == $id_dosen) {
+                $r->role_dosen = 'penguji3';
+            } else {
+                $r->role_dosen = null;
+            }
+        }
+
         return response()->json([
             'status' => 'success',
             'data' => $rows,
@@ -283,9 +295,14 @@ class SkripsiDosen extends Controller
             ->where('id_dosen', $request->id_dosen)
             ->get();
 
+        $ba = DB::table('akd_skripsi_berita_acara')
+            ->where('id_skripsi_ujian', $request->id_skripsi_ujian)
+            ->first();
+
         return response()->json([
             'status' => 'success',
-            'data' => $rows
+            'data' => $rows,
+            'berita_acara' => $ba
         ]);
     }
 

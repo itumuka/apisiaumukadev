@@ -454,50 +454,47 @@ class SkripsiDosen extends Controller
                 }
             }
 
-            // Jika seluruh tim penilai/verifikator sudah memberi nilai, buat Berita Acara
+            // Buat atau update record Berita Acara
             $status = $ujian->status;
             if (count($examiner_scores) == count($examiners)) {
-                // Semua penguji sudah input → tunggu penetapan formal (Berita Acara)
                 if (!in_array($ujian->status, ['menunggu_penetapan', 'ditetapkan', 'lulus', 'tidak_lulus'])) {
                     $status = 'menunggu_penetapan';
                 }
-
-                // Buat atau update record Berita Acara
-                $existing_ba = DB::table('akd_skripsi_berita_acara')
-                    ->where('id_skripsi_ujian', $id_skripsi_ujian)
-                    ->first();
-
-                $baData = [
-                    'nilai_angka' => $final_numeric_score,
-                    'nilai_huruf' => $letter,
-                    'updated_at'  => now(),
-                ];
-                if ($request->has('catatan') && $request->catatan !== null) {
-                    $baData['catatan'] = $request->catatan;
-                }
-                if ($id_dosen == $ujian->id_penguji1 && $request->has('keputusan')) {
-                    $baData['keputusan'] = $request->keputusan;
-                }
-
-                if (!$existing_ba) {
-                    $baData['id_skripsi_ujian'] = $id_skripsi_ujian;
-                    $baData['nim']              = $ujian->nim;
-                    $baData['id_penguji1']      = $ujian->id_penguji1;
-                    $baData['id_penguji2']      = $ujian->id_penguji2;
-                    $baData['id_penguji3']      = $ujian->id_penguji3;
-                    $baData['status']           = 'menunggu_ttd';
-                    $baData['created_at']        = now();
-                    DB::table('akd_skripsi_berita_acara')->insert($baData);
-                } else {
-                    DB::table('akd_skripsi_berita_acara')
-                        ->where('id_skripsi_ujian', $id_skripsi_ujian)
-                        ->update($baData);
-                }
-            } elseif (count($examiner_scores) > 0) {
-                // Sebagian penguji sudah input nilai → status intermediat "dinilai"
+            } else {
                 if (!in_array($ujian->status, ['menunggu_penetapan', 'ditetapkan', 'lulus', 'tidak_lulus'])) {
                     $status = 'dinilai';
                 }
+            }
+
+            $existing_ba = DB::table('akd_skripsi_berita_acara')
+                ->where('id_skripsi_ujian', $id_skripsi_ujian)
+                ->first();
+
+            $baData = [
+                'nilai_angka' => $final_numeric_score,
+                'nilai_huruf' => $letter,
+                'updated_at'  => now(),
+            ];
+            if ($request->has('catatan') && $request->catatan !== null) {
+                $baData['catatan'] = $request->catatan;
+            }
+            if ($id_dosen == $ujian->id_penguji1 && $request->has('keputusan')) {
+                $baData['keputusan'] = $request->keputusan;
+            }
+
+            if (!$existing_ba) {
+                $baData['id_skripsi_ujian'] = $id_skripsi_ujian;
+                $baData['nim']              = $ujian->nim;
+                $baData['id_penguji1']      = $ujian->id_penguji1;
+                $baData['id_penguji2']      = $ujian->id_penguji2;
+                $baData['id_penguji3']      = $ujian->id_penguji3;
+                $baData['status']           = 'menunggu_ttd';
+                $baData['created_at']        = now();
+                DB::table('akd_skripsi_berita_acara')->insert($baData);
+            } else {
+                DB::table('akd_skripsi_berita_acara')
+                    ->where('id_skripsi_ujian', $id_skripsi_ujian)
+                    ->update($baData);
             }
 
             DB::table('akd_skripsi_ujian')

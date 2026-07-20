@@ -526,7 +526,7 @@ class SkripsiDosen extends Controller
             ->leftJoin('simpeg_pegawai as p2', 'u.id_penguji2', '=', 'p2.id')
             ->leftJoin('simpeg_pegawai as p3', 'u.id_penguji3', '=', 'p3.id')
             ->select(
-                'u.*', 's.judul', 'm.nama_mahasiswa',
+                'u.*', 's.judul', 's.target_luaran', 'm.nama_mahasiswa', 'm.kode_program_studi as kode_prodi',
                 'prodi.nama_program_studi', 'fak.nama_fakultas',
                 DB::raw("CONCAT_WS(' ', kps.gelar_depan, kps.nama, kps.gelar_belakang) as nama_kaprodi"),
                 'kps.nidn as nidn_kaprodi',
@@ -543,6 +543,9 @@ class SkripsiDosen extends Controller
             ->first();
 
         if (!$ujian) return response()->json(['error' => 'Data ujian tidak ditemukan.'], 404);
+
+        $jalur = (!empty($ujian->target_luaran) && $ujian->target_luaran !== 'buku_skripsi') ? 'obe' : 'reguler';
+        $ujian->is_obe = ($jalur === 'obe') ? 1 : 0;
 
         $is_penguji = false;
         if ($id_dosen) {
@@ -574,7 +577,7 @@ class SkripsiDosen extends Controller
         // Ambil aspek penilaian untuk program studi ini
         $aspek = DB::table('akd_skripsi_aspek')
             ->where('kode_prodi', $ujian->kode_prodi ?? '')
-            ->where('jalur', $ujian->is_obe == 1 ? 'obe' : 'reguler')
+            ->where('jalur', $jalur)
             ->get();
 
         return response()->json([

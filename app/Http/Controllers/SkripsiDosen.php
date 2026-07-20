@@ -478,8 +478,13 @@ class SkripsiDosen extends Controller
             if ($request->has('catatan') && $request->catatan !== null) {
                 $baData['catatan'] = $request->catatan;
             }
-            if ($id_dosen == $ujian->id_penguji1 && $request->has('keputusan')) {
-                $baData['keputusan'] = $request->keputusan;
+            if ($id_dosen == $ujian->id_penguji1) {
+                if ($request->has('keputusan')) {
+                    $baData['keputusan'] = $request->keputusan;
+                }
+                if ($request->has('batas_revisi') && $request->batas_revisi !== null) {
+                    $baData['batas_revisi'] = $request->batas_revisi;
+                }
             }
 
             if (!$existing_ba) {

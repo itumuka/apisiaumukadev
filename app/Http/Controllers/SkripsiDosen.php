@@ -617,16 +617,24 @@ class SkripsiDosen extends Controller
             ->where('id_skripsi_ujian', $id_skripsi_ujian)->first();
         if (!$ba) return response()->json(['error' => 'Berita Acara belum dibuat. Pastikan semua penguji sudah input nilai.'], 404);
 
-        // Tentukan kolom setuju berdasarkan peran dosen
-        $updateField = null;
-        if ($id_dosen == $ujian->id_penguji1 && !$ba->setuju_penguji1) $updateField = 'setuju_penguji1';
-        elseif ($id_dosen == $ujian->id_penguji2 && !$ba->setuju_penguji2) $updateField = 'setuju_penguji2';
-        elseif ($id_dosen == $ujian->id_penguji3 && !$ba->setuju_penguji3) $updateField = 'setuju_penguji3';
-        else return response()->json(['error' => 'Anda sudah menyetujui atau tidak terdaftar sebagai penguji.'], 400);
+        // Tentukan kolom setuju & valid_id berdasarkan peran dosen
+        $updateData = ['updated_at' => now()];
+        if ($id_dosen == $ujian->id_penguji1 && !$ba->setuju_penguji1) {
+            $updateData['setuju_penguji1'] = now();
+            $updateData['valid_id_penguji1'] = $ba->valid_id_penguji1 ?: uniqid('ba_p1_', true);
+        } elseif ($id_dosen == $ujian->id_penguji2 && !$ba->setuju_penguji2) {
+            $updateData['setuju_penguji2'] = now();
+            $updateData['valid_id_penguji2'] = $ba->valid_id_penguji2 ?: uniqid('ba_p2_', true);
+        } elseif ($id_dosen == $ujian->id_penguji3 && !$ba->setuju_penguji3) {
+            $updateData['setuju_penguji3'] = now();
+            $updateData['valid_id_penguji3'] = $ba->valid_id_penguji3 ?: uniqid('ba_p3_', true);
+        } else {
+            return response()->json(['error' => 'Anda sudah menyetujui atau tidak terdaftar sebagai penguji.'], 400);
+        }
 
         DB::table('akd_skripsi_berita_acara')
             ->where('id_skripsi_ujian', $id_skripsi_ujian)
-            ->update([$updateField => now(), 'updated_at' => now()]);
+            ->update($updateData);
 
         // Re-check: apakah semua penguji yang terdaftar sudah TTD?
         $ba_updated = DB::table('akd_skripsi_berita_acara')

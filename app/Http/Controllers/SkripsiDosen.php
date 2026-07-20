@@ -450,28 +450,31 @@ class SkripsiDosen extends Controller
                     ->where('id_skripsi_ujian', $id_skripsi_ujian)
                     ->first();
 
+                $baData = [
+                    'nilai_angka' => $final_numeric_score,
+                    'nilai_huruf' => $letter,
+                    'updated_at'  => now(),
+                ];
+                if ($request->has('catatan') && $request->catatan !== null) {
+                    $baData['catatan'] = $request->catatan;
+                }
+                if ($id_dosen == $ujian->id_penguji1 && $request->has('keputusan')) {
+                    $baData['keputusan'] = $request->keputusan;
+                }
+
                 if (!$existing_ba) {
-                    DB::table('akd_skripsi_berita_acara')->insert([
-                        'id_skripsi_ujian' => $id_skripsi_ujian,
-                        'nim'              => $ujian->nim,
-                        'nilai_angka'      => $final_numeric_score,
-                        'nilai_huruf'      => $letter,
-                        'id_penguji1'      => $ujian->id_penguji1,
-                        'id_penguji2'      => $ujian->id_penguji2,
-                        'id_penguji3'      => $ujian->id_penguji3,
-                        'status'           => 'menunggu_ttd',
-                        'created_at'       => now(),
-                        'updated_at'       => now(),
-                    ]);
+                    $baData['id_skripsi_ujian'] = $id_skripsi_ujian;
+                    $baData['nim']              = $ujian->nim;
+                    $baData['id_penguji1']      = $ujian->id_penguji1;
+                    $baData['id_penguji2']      = $ujian->id_penguji2;
+                    $baData['id_penguji3']      = $ujian->id_penguji3;
+                    $baData['status']           = 'menunggu_ttd';
+                    $baData['created_at']        = now();
+                    DB::table('akd_skripsi_berita_acara')->insert($baData);
                 } else {
-                    // Update nilai terbaru jika sudah ada
                     DB::table('akd_skripsi_berita_acara')
                         ->where('id_skripsi_ujian', $id_skripsi_ujian)
-                        ->update([
-                            'nilai_angka' => $final_numeric_score,
-                            'nilai_huruf' => $letter,
-                            'updated_at'  => now(),
-                        ]);
+                        ->update($baData);
                 }
             } elseif (count($examiner_scores) > 0) {
                 // Sebagian penguji sudah input nilai → status intermediat "dinilai"

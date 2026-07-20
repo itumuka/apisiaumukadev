@@ -1336,7 +1336,7 @@ class SkripsiKaprodi extends Controller
     {
         $v = Validator::make($request->all(), [
             'id_skripsi_ujian' => 'required',
-            'status'           => 'required|in:lulus,tidak_lulus',
+            'status'           => 'nullable|in:lulus,tidak_lulus',
         ]);
 
         if ($v->fails()) {
@@ -1344,7 +1344,6 @@ class SkripsiKaprodi extends Controller
         }
 
         $id_skripsi_ujian = $request->id_skripsi_ujian;
-        $status = $request->status;
 
         $ujian = DB::table('akd_skripsi_ujian')->where('id', $id_skripsi_ujian)->first();
         if (!$ujian) {
@@ -1359,6 +1358,15 @@ class SkripsiKaprodi extends Controller
         // Ketiga penguji wajib ttd digital (tanggal tidak null)
         if (!$ba->setuju_penguji1 || !$ba->setuju_penguji2 || !$ba->setuju_penguji3) {
             return response()->json(['error' => 'Berita Acara belum ditandatangani digital oleh ketiga penguji.'], 400);
+        }
+
+        $status = $request->status;
+        if (!$status) {
+            if ($ba->keputusan && str_contains($ba->keputusan, 'tidak_lulus')) {
+                $status = 'tidak_lulus';
+            } else {
+                $status = 'lulus';
+            }
         }
 
         DB::beginTransaction();

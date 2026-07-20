@@ -201,32 +201,7 @@ class SkripsiDosen extends Controller
                 's.judul',
                 's.target_luaran',
                 DB::raw("CASE WHEN s.target_luaran IS NOT NULL AND s.target_luaran != 'buku_skripsi' THEN 1 ELSE 0 END as is_obe"),
-                DB::raw("CASE 
-                    WHEN s.target_luaran IS NOT NULL AND s.target_luaran != 'buku_skripsi' THEN 1 
-                    WHEN (SELECT COUNT(id) FROM akd_skripsi_nilai_cpmk WHERE id_skripsi_ujian = u.id AND id_cpmk > 0) > 0 THEN 1
-                    WHEN (SELECT COUNT(id) FROM akd_skripsi_nilai_cpmk WHERE id_skripsi_ujian = u.id AND id_cpmk = 0) > 0 THEN 0
-                    ELSE COALESCE(
-                        (SELECT mk.cpmk_based 
-                         FROM akd_detail_krs dk
-                         JOIN akd_kelas_kuliah kk ON dk.id_kelas = kk.id_kelas
-                         JOIN akd_penawaran_matakuliah pm ON kk.id_tawar = pm.id_tawar
-                         JOIN akd_matakuliah mk ON pm.id_matakuliah = mk.id_matakuliah
-                         JOIN akd_krs k ON dk.id_krs = k.id_krs
-                         JOIN akd_heregistrasi h ON k.id_heregistrasi = h.id_heregistrasi
-                         WHERE h.nim = u.nim 
-                           AND h.krs = 1
-                           AND (mk.nama_matakuliah LIKE '%Skripsi%' OR mk.nama_matakuliah LIKE '%Tugas Akhir%' OR mk.nama_matakuliah LIKE '%Laporan Tugas Akhir%')
-                           AND mk.nama_matakuliah NOT LIKE '%proposal%'
-                         LIMIT 1),
-                        (SELECT cpmk_based 
-                         FROM akd_matakuliah 
-                         WHERE kode_program_studi = m.kode_program_studi 
-                           AND (nama_matakuliah LIKE '%Skripsi%' OR nama_matakuliah LIKE '%Tugas Akhir%' OR nama_matakuliah LIKE '%Laporan Tugas Akhir%') 
-                           AND nama_matakuliah NOT LIKE '%proposal%' 
-                         LIMIT 1),
-                        1
-                    )
-                END as cpmk_based"),
+                DB::raw("CASE WHEN s.target_luaran IS NOT NULL AND s.target_luaran != 'buku_skripsi' THEN 1 ELSE 0 END as cpmk_based"),
                 'm.kode_program_studi as kode_prodi',
                 'p.nama_program_studi',
                 'u.tanggal_ujian as tgl_ujian',

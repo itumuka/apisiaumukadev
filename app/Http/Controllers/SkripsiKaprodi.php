@@ -916,15 +916,34 @@ class SkripsiKaprodi extends Controller
                 $aspectTotals[$a->nama_aspek] = 0;
             }
 
-            foreach ($request->rubrik as $r) {
-                $aspek = $r['aspek'] ?? '';
+            foreach ($request->rubrik as &$r) {
+                $aspek = trim($r['aspek'] ?? '');
                 $bobot = floatval($r['bobot'] ?? 0);
-                if (isset($aspectTotals[$aspek])) {
-                    $aspectTotals[$aspek] += $bobot;
+                
+                $matchedAspect = null;
+                foreach ($aspects as $a) {
+                    $dbAspekLower = strtolower(trim($aspek));
+                    $aNameLower = strtolower(trim($a->nama_aspek));
+                    if ($dbAspekLower === $aNameLower) {
+                        $matchedAspect = $a;
+                        break;
+                    } elseif ($dbAspekLower === 'substansi' && strpos($aNameLower, 'substansi') !== false) {
+                        $matchedAspect = $a;
+                        break;
+                    } elseif ($dbAspekLower === 'ujian' && strpos($aNameLower, 'ujian') !== false) {
+                        $matchedAspect = $a;
+                        break;
+                    }
+                }
+
+                if ($matchedAspect) {
+                    $r['aspek'] = $matchedAspect->nama_aspek;
+                    $aspectTotals[$matchedAspect->nama_aspek] += $bobot;
                 } else {
                     return response()->json(['error' => 'Aspek "' . $aspek . '" tidak terdaftar di Master Aspek Penilaian.'], 422);
                 }
             }
+            unset($r);
 
             foreach ($aspects as $a) {
                 $expected = floatval($a->bobot);

@@ -916,7 +916,9 @@ class SkripsiKaprodi extends Controller
                 $aspectTotals[$a->nama_aspek] = 0;
             }
 
-            foreach ($request->rubrik as &$r) {
+            $rubrik = $request->rubrik;
+
+            foreach ($rubrik as &$r) {
                 $aspek = trim($r['aspek'] ?? '');
                 $bobot = floatval($r['bobot'] ?? 0);
                 
@@ -952,6 +954,8 @@ class SkripsiKaprodi extends Controller
                     return response()->json(['error' => 'Total bobot indikator aspek "' . $a->nama_aspek . '" harus tepat ' . $expected . '% (saat ini: ' . $actual . '%)'], 422);
                 }
             }
+        } else {
+            $rubrik = $request->rubrik;
         }
 
         DB::beginTransaction();
@@ -964,7 +968,7 @@ class SkripsiKaprodi extends Controller
 
             // Insert new custom rubrics
             $now = now();
-            foreach ($request->rubrik as $r) {
+            foreach ($rubrik as $r) {
                 DB::table('akd_skripsi_rubrik_indikator')->insert([
                     'kode_indikator' => $r['kode_indikator'],
                     'nama_indikator' => $r['nama_indikator'],

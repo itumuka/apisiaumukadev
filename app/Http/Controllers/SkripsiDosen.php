@@ -357,7 +357,7 @@ class SkripsiDosen extends Controller
         // Fetch dynamic aspects
         $aspects = DB::table('akd_skripsi_aspek')
             ->where('kode_prodi', $mhs->kode_program_studi ?? '')
-            ->where('jalur', $ujian->is_obe == 1 ? 'obe' : 'reguler')
+            ->where('jalur', $jalur)
             ->get()
             ->keyBy('nama_aspek');
 

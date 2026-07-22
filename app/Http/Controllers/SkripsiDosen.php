@@ -619,6 +619,11 @@ class SkripsiDosen extends Controller
             ->where('id_skripsi_ujian', $id_skripsi_ujian)
             ->first();
 
+        // Ambil data luaran jika jalur OBE
+        $luaran = DB::table('akd_skripsi_luaran')
+            ->where('id_skripsi', $ujian->id_skripsi)
+            ->first();
+
         // Ambil nilai per indikator dari semua penguji (mendukung fallback data historis)
         $nilai_indikator = DB::table('akd_skripsi_nilai_indikator as nc')
             ->leftJoin('akd_skripsi_rubrik_indikator as r', 'nc.id_rubrik_indikator', '=', 'r.id')
@@ -643,6 +648,7 @@ class SkripsiDosen extends Controller
             'data' => [
                 'ujian'           => $ujian,
                 'berita_acara'    => $ba,
+                'luaran'          => $luaran,
                 'nilai_indikator' => $nilai_indikator,
                 'nilai_cpmk'      => $nilai_indikator, // compatibility fallback
                 'aspek'           => $aspek,

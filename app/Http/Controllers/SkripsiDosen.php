@@ -721,16 +721,19 @@ class SkripsiDosen extends Controller
 
         $id_skripsi_ujian = $request->id_skripsi_ujian;
         $nomor_ba = $request->nomor_ba;
-        $batas_revisi = $request->batas_revisi;
 
         $ba = DB::table('akd_skripsi_berita_acara')
             ->where('id_skripsi_ujian', $id_skripsi_ujian)->first();
 
         $updateData = [
             'nomor_ba'     => $nomor_ba,
-            'batas_revisi' => $batas_revisi,
             'updated_at'   => now(),
         ];
+
+        // Only update batas_revisi if explicitly passed in the request payload
+        if ($request->has('batas_revisi') && $request->batas_revisi !== null) {
+            $updateData['batas_revisi'] = $request->batas_revisi;
+        }
 
         if (!$ba) {
             $ujian = DB::table('akd_skripsi_ujian')
@@ -752,61 +755,63 @@ class SkripsiDosen extends Controller
                 ->update($updateData);
         }
 
-        // Notify Mahasiswa and Dosen Pembimbing about the Berita Acara publication
-        $mhs = DB::table('akd_skripsi_ujian as u')
-            ->join('akd_skripsi as s', 'u.id_skripsi', '=', 's.id')
-            ->leftJoin('simpeg_pegawai as pmb1', 's.id_dosen_pembimbing1', '=', 'pmb1.id')
-            ->leftJoin('simpeg_pegawai as pmb2', 's.id_dosen_pembimbing2', '=', 'pmb2.id')
+        // Fetch students and exam panel details (Tim Penguji)
+        $ujian = DB::table('akd_skripsi_ujian as u')
+            ->leftJoin('simpeg_pegawai as p1', 'u.id_penguji1', '=', 'p1.id')
+            ->leftJoin('simpeg_pegawai as p2', 'u.id_penguji2', '=', 'p2.id')
+            ->leftJoin('simpeg_pegawai as p3', 'u.id_penguji3', '=', 'p3.id')
             ->where('u.id', $id_skripsi_ujian)
-            ->select('u.nim', 'pmb1.email_umuka as em1', 'pmb1.username as u1', 'pmb1.nidn as n1', 'pmb2.email_umuka as em2', 'pmb2.username as u2', 'pmb2.nidn as n2')
+            ->select(
+                'u.nim',
+                'p1.email_umuka as em1', 'p1.username as u1', 'p1.nidn as n1',
+                'p2.email_umuka as em2', 'p2.username as u2', 'p2.nidn as n2',
+                'p3.email_umuka as em3', 'p3.username as u3', 'p3.nidn as n3'
+            )
             ->first();
 
-        if ($mhs) {
-            $msg = "Nomor Berita Acara Ujian Anda telah diterbitkan.";
+        if ($ujian) {
+            $currentBa = DB::table('akd_skripsi_berita_acara')->where('id_skripsi_ujian', $id_skripsi_ujian)->first();
+            $msgMhs = "Nomor Berita Acara Ujian Anda telah diterbitkan.";
             if ($nomor_ba) {
-                $msg .= " Nomor: " . $nomor_ba;
+                $msgMhs .= " Nomor: " . $nomor_ba;
             }
-            if ($batas_revisi) {
-                $msg .= " Batas revisi s.d " . \Carbon\Carbon::parse($batas_revisi)->locale('id')->format('d F Y') . ".";
+            if ($currentBa && $currentBa->batas_revisi) {
+                $msgMhs .= " Batas revisi s.d " . \Carbon\Carbon::parse($currentBa->batas_revisi)->locale('id')->format('d F Y') . ".";
             }
 
             // 1. Notify Mahasiswa
             \App\Helpers\NotificationHelper::send(
-                $mhs->nim,
+                $ujian->nim,
                 'Nomor Berita Acara Diterbitkan',
-                $msg,
+                $msgMhs,
                 '/mahasiswa/skripsi/ujian',
                 'skripsi'
             );
 
-            // 2. Notify Pembimbing 1
-            $pmb1User = $mhs->em1 ?: ($mhs->u1 ?: $mhs->n1);
-            if ($pmb1User) {
-                \App\Helpers\NotificationHelper::send(
-                    $pmb1User,
-                    'Berita Acara Ujian Mahasiswa Bimbingan',
-                    "Nomor Berita Acara Ujian untuk mahasiswa {$mhs->nim} telah diterbitkan: " . ($nomor_ba ?: '-'),
-                    '/dosen/skripsi/bimbingan',
-                    'skripsi'
-                );
-            }
+            // 2. Notify Tim Penguji (penguji1, penguji2, penguji3)
+            $examiners = [
+                ['email' => $ujian->em1, 'user' => $ujian->u1, 'nidn' => $ujian->n1],
+                ['email' => $ujian->em2, 'user' => $ujian->u2, 'nidn' => $ujian->n2],
+                ['email' => $ujian->em3, 'user' => $ujian->u3, 'nidn' => $ujian->n3],
+            ];
 
-            // 3. Notify Pembimbing 2
-            $pmb2User = $mhs->em2 ?: ($mhs->u2 ?: $mhs->n2);
-            if ($pmb2User) {
-                \App\Helpers\NotificationHelper::send(
-                    $pmb2User,
-                    'Berita Acara Ujian Mahasiswa Bimbingan',
-                    "Nomor Berita Acara Ujian untuk mahasiswa {$mhs->nim} telah diterbitkan: " . ($nomor_ba ?: '-'),
-                    '/dosen/skripsi/bimbingan',
-                    'skripsi'
-                );
+            foreach ($examiners as $ex) {
+                $targetUser = $ex['email'] ?: ($ex['user'] ?: $ex['nidn']);
+                if ($targetUser) {
+                    \App\Helpers\NotificationHelper::send(
+                        $targetUser,
+                        'Nomor Berita Acara Diterbitkan',
+                        "Nomor Berita Acara Ujian untuk mahasiswa {$ujian->nim} telah diterbitkan: " . ($nomor_ba ?: '-'),
+                        '/dosen/skripsi/penetapan',
+                        'skripsi'
+                    );
+                }
             }
         }
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'Nomor Berita Acara & Batas Revisi berhasil diperbarui.'
+            'message' => 'Nomor Berita Acara berhasil diperbarui.'
         ]);
     }
 }

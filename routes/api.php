@@ -476,6 +476,7 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::post("/dosen/skripsi/setuju-berita-acara", "SkripsiDosen@setuju_berita_acara")->name('skripsi_dosen_setuju_berita_acara');
     Route::get("/kaprodi/skripsi/penetapan-nilai", "SkripsiKaprodi@list_penetapan_nilai")->name('skripsi_kaprodi_list_penetapan_nilai');
     Route::post("/kaprodi/skripsi/tetapkan-nilai", "SkripsiKaprodi@tetapkan_nilai")->name('skripsi_kaprodi_tetapkan_nilai');
+    Route::post("/akademik/skripsi/update-berita-acara", "SkripsiDosen@update_berita_acara_by_admin")->name('skripsi_admin_update_berita_acara');
 
     // API Cetak Data & Approval Bimbingan
     Route::get("/akademik/skripsi/bimbingan/cetak-data", "Skripsi@get_cetak_bimbingan")->name('skripsi_cetak_bimbingan_data');

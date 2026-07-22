@@ -1287,10 +1287,12 @@ class SkripsiKaprodi extends Controller
     public function list_penetapan_nilai(Request $request)
     {
         $kode_prodi = $request->kode_prodi;
+        $kode_fakultas = $request->kode_fakultas;
 
         $query = DB::table('akd_skripsi_ujian as u')
             ->join('akd_skripsi as s', 'u.id_skripsi', '=', 's.id')
             ->join('akd_mahasiswa as m', 'u.nim', '=', 'm.nim')
+            ->leftJoin('akd_program_studi as prodi', 'm.kode_program_studi', '=', 'prodi.kode_program_studi')
             ->leftJoin('akd_skripsi_berita_acara as ba', 'u.id', '=', 'ba.id_skripsi_ujian')
             ->leftJoin('simpeg_pegawai as p1', 'u.id_penguji1', '=', 'p1.id')
             ->leftJoin('simpeg_pegawai as p2', 'u.id_penguji2', '=', 'p2.id')
@@ -1324,6 +1326,10 @@ class SkripsiKaprodi extends Controller
 
         if ($kode_prodi) {
             $query->where('m.kode_program_studi', $kode_prodi);
+        }
+
+        if ($kode_fakultas) {
+            $query->where('prodi.kode_fakultas', $kode_fakultas);
         }
 
         $data = $query->whereIn('u.status', ['menunggu_penetapan', 'ditetapkan', 'lulus', 'tidak_lulus'])->get();

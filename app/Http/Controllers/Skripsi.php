@@ -449,6 +449,26 @@ class Skripsi extends Controller
             'updated_at' => now()
         ]);
 
+        // Notify Dosen Pembimbing about the new guidance submission
+        $dosen = DB::table('simpeg_pegawai')
+            ->where('id', $skripsi->id_dosen_pembimbing1)
+            ->select('email_umuka', 'username', 'nidn')
+            ->first();
+
+        if ($dosen) {
+            $targetUser = $dosen->email_umuka ?: ($dosen->username ?: $dosen->nidn);
+            if ($targetUser) {
+                $studentName = DB::table('akd_mahasiswa')->where('nim', $nim)->value('nama_mahasiswa') ?? $nim;
+                \App\Helpers\NotificationHelper::send(
+                    $targetUser,
+                    'Bimbingan Baru Masuk',
+                    "Mahasiswa {$studentName} ({$nim}) mengajukan bimbingan baru: \"" . substr($request->topik, 0, 50) . "\".",
+                    '/dosen/skripsi/bimbingan',
+                    'skripsi'
+                );
+            }
+        }
+
         return response()->json(['success' => 'Catatan bimbingan berhasil disimpan.']);
     }
 

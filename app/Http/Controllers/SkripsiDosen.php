@@ -84,6 +84,20 @@ class SkripsiDosen extends Controller
             ->where('id', $request->id_log)
             ->update($updateData);
 
+        // Notify Student about guidance validation
+        $log = DB::table('akd_skripsi_bimbingan')->where('id', $request->id_log)->first();
+        if ($log) {
+            $statusText = $request->status === 'disetujui' ? 'disetujui' : 'perlu revisi';
+            $dosenName = DB::table('simpeg_pegawai')->where('id', $request->id_dosen)->value('nama') ?? 'Dosen Pembimbing';
+            \App\Helpers\NotificationHelper::send(
+                $log->nim,
+                'Validasi Bimbingan Skripsi',
+                "Catatan bimbingan Anda telah {$statusText} oleh {$dosenName}.",
+                '/mahasiswa/skripsi/bimbingan',
+                'skripsi'
+            );
+        }
+
         return response()->json(['success' => 'Status Bimbingan Berhasil Diperbarui']);
     }
 

@@ -516,12 +516,12 @@ class SkripsiDosen extends Controller
                 ->join('akd_program_studi as prodi', 'm.kode_program_studi', '=', 'prodi.kode_program_studi')
                 ->leftJoin('simpeg_pegawai as kps', 'prodi.pimpinan_prodi', '=', 'kps.id')
                 ->where('m.nim', $ujian->nim)
-                ->select('kps.username', 'kps.nidn')
+                ->select('kps.email_umuka', 'kps.username', 'kps.nidn')
                 ->first();
 
             if ($kaprodi) {
                 $dosenName = DB::table('simpeg_pegawai')->where('id', $id_dosen)->value('nama') ?? 'Dosen Penguji';
-                $kpsUser = $kaprodi->username ?: $kaprodi->nidn;
+                $kpsUser = $kaprodi->email_umuka ?: ($kaprodi->username ?: $kaprodi->nidn);
                 if ($kpsUser) {
                     \App\Helpers\NotificationHelper::send(
                         $kpsUser,
@@ -758,7 +758,7 @@ class SkripsiDosen extends Controller
             ->leftJoin('simpeg_pegawai as pmb1', 's.id_dosen_pembimbing1', '=', 'pmb1.id')
             ->leftJoin('simpeg_pegawai as pmb2', 's.id_dosen_pembimbing2', '=', 'pmb2.id')
             ->where('u.id', $id_skripsi_ujian)
-            ->select('u.nim', 'pmb1.username as u1', 'pmb1.nidn as n1', 'pmb2.username as u2', 'pmb2.nidn as n2')
+            ->select('u.nim', 'pmb1.email_umuka as em1', 'pmb1.username as u1', 'pmb1.nidn as n1', 'pmb2.email_umuka as em2', 'pmb2.username as u2', 'pmb2.nidn as n2')
             ->first();
 
         if ($mhs) {
@@ -780,7 +780,7 @@ class SkripsiDosen extends Controller
             );
 
             // 2. Notify Pembimbing 1
-            $pmb1User = $mhs->u1 ?: $mhs->n1;
+            $pmb1User = $mhs->em1 ?: ($mhs->u1 ?: $mhs->n1);
             if ($pmb1User) {
                 \App\Helpers\NotificationHelper::send(
                     $pmb1User,
@@ -792,7 +792,7 @@ class SkripsiDosen extends Controller
             }
 
             // 3. Notify Pembimbing 2
-            $pmb2User = $mhs->u2 ?: $mhs->n2;
+            $pmb2User = $mhs->em2 ?: ($mhs->u2 ?: $mhs->n2);
             if ($pmb2User) {
                 \App\Helpers\NotificationHelper::send(
                     $pmb2User,

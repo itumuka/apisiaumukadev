@@ -1438,6 +1438,28 @@ class SkripsiKaprodi extends Controller
                 }
             }
 
+            // Notify Dekan / Dekanat about the final score assignment by Kaprodi
+            $dekan = DB::table('akd_mahasiswa as m')
+                ->join('akd_program_studi as prodi', 'm.kode_program_studi', '=', 'prodi.kode_program_studi')
+                ->join('akd_fakultas as fak', 'prodi.kode_fakultas', '=', 'fak.kode_fakultas')
+                ->leftJoin('simpeg_pegawai as dekan_peg', 'fak.pimpinan', '=', 'dekan_peg.id')
+                ->where('m.nim', $ujian->nim)
+                ->select('dekan_peg.email_umuka', 'dekan_peg.username', 'dekan_peg.nidn')
+                ->first();
+
+            if ($dekan) {
+                $dekanUser = $dekan->email_umuka ?: ($dekan->username ?: $dekan->nidn);
+                if ($dekanUser) {
+                    \App\Helpers\NotificationHelper::send(
+                        $dekanUser,
+                        'Penetapan Nilai Skripsi & Berita Acara',
+                        "Nilai kelulusan ujian skripsi mahasiswa {$ujian->nim} telah ditetapkan oleh Kaprodi. Silakan lakukan validasi Berita Acara.",
+                        '/dekanat/skripsi/penetapan-skripsi',
+                        'skripsi'
+                    );
+                }
+            }
+
             DB::commit();
             return response()->json(['success' => 'Persetujuan Penetapan Nilai berhasil disimpan. Nilai telah disinkronisasi ke transkrip mahasiswa.']);
         } catch (\Exception $e) {

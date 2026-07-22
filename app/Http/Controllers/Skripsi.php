@@ -452,11 +452,11 @@ class Skripsi extends Controller
         // Notify Dosen Pembimbing about the new guidance submission
         $dosen = DB::table('simpeg_pegawai')
             ->where('id', $skripsi->id_dosen_pembimbing1)
-            ->select('email_umuka', 'username', 'nidn')
+            ->select('email_umuka', 'nidn')
             ->first();
 
         if ($dosen) {
-            $targetUser = $dosen->email_umuka ?: ($dosen->username ?: $dosen->nidn);
+            $targetUser = $dosen->email_umuka ?: $dosen->nidn;
             if ($targetUser) {
                 $studentName = DB::table('akd_mahasiswa')->where('nim', $nim)->value('nama_mahasiswa') ?? $nim;
                 \App\Helpers\NotificationHelper::send(

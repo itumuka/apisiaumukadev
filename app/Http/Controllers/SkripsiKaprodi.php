@@ -1444,11 +1444,11 @@ class SkripsiKaprodi extends Controller
                 ->join('akd_fakultas as fak', 'prodi.kode_fakultas', '=', 'fak.kode_fakultas')
                 ->leftJoin('simpeg_pegawai as dekan_peg', 'fak.pimpinan', '=', 'dekan_peg.id')
                 ->where('m.nim', $ujian->nim)
-                ->select('dekan_peg.email_umuka', 'dekan_peg.username', 'dekan_peg.nidn')
+                ->select('dekan_peg.email_umuka', 'dekan_peg.nidn')
                 ->first();
 
             if ($dekan) {
-                $dekanUser = $dekan->email_umuka ?: ($dekan->username ?: $dekan->nidn);
+                $dekanUser = $dekan->email_umuka ?: $dekan->nidn;
                 if ($dekanUser) {
                     \App\Helpers\NotificationHelper::send(
                         $dekanUser,

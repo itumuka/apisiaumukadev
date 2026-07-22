@@ -530,12 +530,12 @@ class SkripsiDosen extends Controller
                 ->join('akd_program_studi as prodi', 'm.kode_program_studi', '=', 'prodi.kode_program_studi')
                 ->leftJoin('simpeg_pegawai as kps', 'prodi.pimpinan_prodi', '=', 'kps.id')
                 ->where('m.nim', $ujian->nim)
-                ->select('kps.email_umuka', 'kps.username', 'kps.nidn')
+                ->select('kps.email_umuka', 'kps.nidn')
                 ->first();
 
             if ($kaprodi) {
                 $dosenName = DB::table('simpeg_pegawai')->where('id', $id_dosen)->value('nama') ?? 'Dosen Penguji';
-                $kpsUser = $kaprodi->email_umuka ?: ($kaprodi->username ?: $kaprodi->nidn);
+                $kpsUser = $kaprodi->email_umuka ?: $kaprodi->nidn;
                 if ($kpsUser) {
                     \App\Helpers\NotificationHelper::send(
                         $kpsUser,
@@ -777,9 +777,9 @@ class SkripsiDosen extends Controller
             ->where('u.id', $id_skripsi_ujian)
             ->select(
                 'u.nim',
-                'p1.email_umuka as em1', 'p1.username as u1', 'p1.nidn as n1',
-                'p2.email_umuka as em2', 'p2.username as u2', 'p2.nidn as n2',
-                'p3.email_umuka as em3', 'p3.username as u3', 'p3.nidn as n3'
+                'p1.email_umuka as em1', 'p1.nidn as n1',
+                'p2.email_umuka as em2', 'p2.nidn as n2',
+                'p3.email_umuka as em3', 'p3.nidn as n3'
             )
             ->first();
 
@@ -804,13 +804,13 @@ class SkripsiDosen extends Controller
 
             // 2. Notify Tim Penguji (penguji1, penguji2, penguji3)
             $examiners = [
-                ['email' => $ujian->em1, 'user' => $ujian->u1, 'nidn' => $ujian->n1],
-                ['email' => $ujian->em2, 'user' => $ujian->u2, 'nidn' => $ujian->n2],
-                ['email' => $ujian->em3, 'user' => $ujian->u3, 'nidn' => $ujian->n3],
+                ['email' => $ujian->em1, 'nidn' => $ujian->n1],
+                ['email' => $ujian->em2, 'nidn' => $ujian->n2],
+                ['email' => $ujian->em3, 'nidn' => $ujian->n3],
             ];
 
             foreach ($examiners as $ex) {
-                $targetUser = $ex['email'] ?: ($ex['user'] ?: $ex['nidn']);
+                $targetUser = $ex['email'] ?: $ex['nidn'];
                 if ($targetUser) {
                     \App\Helpers\NotificationHelper::send(
                         $targetUser,

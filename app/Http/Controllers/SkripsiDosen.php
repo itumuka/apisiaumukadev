@@ -511,6 +511,28 @@ class SkripsiDosen extends Controller
                     'updated_at'  => now()
                 ]);
 
+            // Notify Kaprodi about the new exam grade entry
+            $kaprodi = DB::table('akd_mahasiswa as m')
+                ->join('akd_program_studi as prodi', 'm.kode_program_studi', '=', 'prodi.kode_program_studi')
+                ->leftJoin('simpeg_pegawai as kps', 'prodi.pimpinan_prodi', '=', 'kps.id')
+                ->where('m.nim', $ujian->nim)
+                ->select('kps.username', 'kps.nidn')
+                ->first();
+
+            if ($kaprodi) {
+                $dosenName = DB::table('simpeg_pegawai')->where('id', $id_dosen)->value('nama') ?? 'Dosen Penguji';
+                $kpsUser = $kaprodi->username ?: $kaprodi->nidn;
+                if ($kpsUser) {
+                    \App\Helpers\NotificationHelper::send(
+                        $kpsUser,
+                        'Input Nilai Ujian Skripsi',
+                        "Dosen {$dosenName} telah menginputkan nilai ujian untuk mahasiswa {$ujian->nim}.",
+                        '/kaprodi/skripsi/penetapan',
+                        'skripsi'
+                    );
+                }
+            }
+
         }
 
         return response()->json([
@@ -728,6 +750,58 @@ class SkripsiDosen extends Controller
             DB::table('akd_skripsi_berita_acara')
                 ->where('id_skripsi_ujian', $id_skripsi_ujian)
                 ->update($updateData);
+        }
+
+        // Notify Mahasiswa and Dosen Pembimbing about the Berita Acara publication
+        $mhs = DB::table('akd_skripsi_ujian as u')
+            ->join('akd_skripsi as s', 'u.id_skripsi', '=', 's.id')
+            ->leftJoin('simpeg_pegawai as pmb1', 's.id_dosen_pembimbing1', '=', 'pmb1.id')
+            ->leftJoin('simpeg_pegawai as pmb2', 's.id_dosen_pembimbing2', '=', 'pmb2.id')
+            ->where('u.id', $id_skripsi_ujian)
+            ->select('u.nim', 'pmb1.username as u1', 'pmb1.nidn as n1', 'pmb2.username as u2', 'pmb2.nidn as n2')
+            ->first();
+
+        if ($mhs) {
+            $msg = "Nomor Berita Acara Ujian Anda telah diterbitkan.";
+            if ($nomor_ba) {
+                $msg .= " Nomor: " . $nomor_ba;
+            }
+            if ($batas_revisi) {
+                $msg .= " Batas revisi s.d " . \Carbon\Carbon::parse($batas_revisi)->locale('id')->format('d F Y') . ".";
+            }
+
+            // 1. Notify Mahasiswa
+            \App\Helpers\NotificationHelper::send(
+                $mhs->nim,
+                'Nomor Berita Acara Diterbitkan',
+                $msg,
+                '/mahasiswa/skripsi/ujian',
+                'skripsi'
+            );
+
+            // 2. Notify Pembimbing 1
+            $pmb1User = $mhs->u1 ?: $mhs->n1;
+            if ($pmb1User) {
+                \App\Helpers\NotificationHelper::send(
+                    $pmb1User,
+                    'Berita Acara Ujian Mahasiswa Bimbingan',
+                    "Nomor Berita Acara Ujian untuk mahasiswa {$mhs->nim} telah diterbitkan: " . ($nomor_ba ?: '-'),
+                    '/dosen/skripsi/bimbingan',
+                    'skripsi'
+                );
+            }
+
+            // 3. Notify Pembimbing 2
+            $pmb2User = $mhs->u2 ?: $mhs->n2;
+            if ($pmb2User) {
+                \App\Helpers\NotificationHelper::send(
+                    $pmb2User,
+                    'Berita Acara Ujian Mahasiswa Bimbingan',
+                    "Nomor Berita Acara Ujian untuk mahasiswa {$mhs->nim} telah diterbitkan: " . ($nomor_ba ?: '-'),
+                    '/dosen/skripsi/bimbingan',
+                    'skripsi'
+                );
+            }
         }
 
         return response()->json([

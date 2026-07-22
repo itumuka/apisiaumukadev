@@ -483,4 +483,8 @@ Route::middleware(['jwtverifie'])->group(function () {
     // API Kaprodi Bimbingan Approval
     Route::get("/kaprodi/skripsi/bimbingan/list", "SkripsiKaprodi@list_bimbingan_prodi")->name('skripsi_kaprodi_list_bimbingan');
     Route::post("/kaprodi/skripsi/bimbingan/approve", "SkripsiKaprodi@approve_bimbingan_prodi")->name('skripsi_kaprodi_approve_bimbingan');
+
+    // System Notifications API
+    Route::get("/notifications", "NotificationController@get_notifications")->name('sys_notifications_list');
+    Route::post("/notifications/read", "NotificationController@mark_as_read")->name('sys_notifications_read');
 });

@@ -196,7 +196,13 @@ class SkripsiDosen extends Controller
     public function list_mahasiswa_diuji(Request $request)
     {
         $id_dosen = $request->id_dosen;
-        if (!$id_dosen) return response()->json(['error' => 'ID Dosen diperlukan'], 400);
+        if (!$id_dosen) {
+            return response()->json([
+                'status' => 'success',
+                'data' => [],
+                'grade_rules' => config('grades.rules')
+            ]);
+        }
 
         $rows = DB::table('akd_skripsi_ujian as u')
             ->join('akd_skripsi as s', 'u.id_skripsi', '=', 's.id')

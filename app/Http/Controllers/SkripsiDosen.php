@@ -478,7 +478,7 @@ class SkripsiDosen extends Controller
             if ($request->has('catatan') && $request->catatan !== null) {
                 $baData['catatan'] = $request->catatan;
             }
-            if ($id_dosen == $ujian->id_penguji1) {
+            if ($id_dosen == $ujian->id_penguji1 || $id_dosen == $ujian->id_penguji2) {
                 if ($request->has('keputusan')) {
                     $baData['keputusan'] = $request->keputusan;
                 }
@@ -682,6 +682,57 @@ class SkripsiDosen extends Controller
             'message' => 'Persetujuan Berita Acara berhasil dicatat.',
             'sudah_ttd' => $sudah_ttd,
             'total_penguji' => count($penguji_ids),
+        ]);
+    }
+
+    /**
+     * Update Nomor Berita Acara & Batas Revisi oleh Admin/Akademik
+     */
+    public function update_berita_acara_by_admin(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'id_skripsi_ujian' => 'required',
+            'nomor_ba'         => 'nullable|string|max:100',
+            'batas_revisi'     => 'nullable|date',
+        ]);
+        if ($v->fails()) return response()->json(['error' => $v->errors()->all()], 422);
+
+        $id_skripsi_ujian = $request->id_skripsi_ujian;
+        $nomor_ba = $request->nomor_ba;
+        $batas_revisi = $request->batas_revisi;
+
+        $ba = DB::table('akd_skripsi_berita_acara')
+            ->where('id_skripsi_ujian', $id_skripsi_ujian)->first();
+
+        $updateData = [
+            'nomor_ba'     => $nomor_ba,
+            'batas_revisi' => $batas_revisi,
+            'updated_at'   => now(),
+        ];
+
+        if (!$ba) {
+            $ujian = DB::table('akd_skripsi_ujian')
+                ->where('id', $id_skripsi_ujian)->first();
+            if (!$ujian) return response()->json(['error' => 'Data ujian tidak ditemukan.'], 404);
+
+            $updateData['id_skripsi_ujian'] = $id_skripsi_ujian;
+            $updateData['nim']              = $ujian->nim;
+            $updateData['id_penguji1']      = $ujian->id_penguji1;
+            $updateData['id_penguji2']      = $ujian->id_penguji2;
+            $updateData['id_penguji3']      = $ujian->id_penguji3;
+            $updateData['status']           = 'menunggu_ttd';
+            $updateData['created_at']       = now();
+
+            DB::table('akd_skripsi_berita_acara')->insert($updateData);
+        } else {
+            DB::table('akd_skripsi_berita_acara')
+                ->where('id_skripsi_ujian', $id_skripsi_ujian)
+                ->update($updateData);
+        }
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Nomor Berita Acara & Batas Revisi berhasil diperbarui.'
         ]);
     }
 }

@@ -1287,11 +1287,8 @@ class SkripsiKaprodi extends Controller
     public function list_penetapan_nilai(Request $request)
     {
         $kode_prodi = $request->kode_prodi;
-        if (!$kode_prodi) {
-            return response()->json(['error' => 'Parameter prodi tidak ditemukan'], 400);
-        }
 
-        $data = DB::table('akd_skripsi_ujian as u')
+        $query = DB::table('akd_skripsi_ujian as u')
             ->join('akd_skripsi as s', 'u.id_skripsi', '=', 's.id')
             ->join('akd_mahasiswa as m', 'u.nim', '=', 'm.nim')
             ->leftJoin('akd_skripsi_berita_acara as ba', 'u.id', '=', 'ba.id_skripsi_ujian')
@@ -1312,6 +1309,8 @@ class SkripsiKaprodi extends Controller
                 'ba.nilai_angka',
                 'ba.nilai_huruf',
                 'ba.status as status_ba',
+                'ba.nomor_ba',
+                'ba.batas_revisi',
                 'ba.setuju_penguji1',
                 'ba.setuju_penguji2',
                 'ba.setuju_penguji3',
@@ -1321,10 +1320,13 @@ class SkripsiKaprodi extends Controller
                 'u.id_penguji1',
                 'u.id_penguji2',
                 'u.id_penguji3'
-            )
-            ->where('m.kode_program_studi', $kode_prodi)
-            ->whereIn('u.status', ['menunggu_penetapan', 'ditetapkan', 'lulus', 'tidak_lulus'])
-            ->get();
+            );
+
+        if ($kode_prodi) {
+            $query->where('m.kode_program_studi', $kode_prodi);
+        }
+
+        $data = $query->whereIn('u.status', ['menunggu_penetapan', 'ditetapkan', 'lulus', 'tidak_lulus'])->get();
 
         return response()->json($data);
     }

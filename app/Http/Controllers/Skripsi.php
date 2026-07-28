@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use App\Models\Mskripsi;
 use Illuminate\Support\Facades\Storage;
+use App\Helpers\NotificationHelper;
 
 class Skripsi extends Controller
 {
@@ -718,6 +719,33 @@ class Skripsi extends Controller
         DB::table('akd_skripsi')
             ->where('id', $skripsi->id)
             ->update(['target_luaran' => $request->jenis_luaran]);
+
+        // Kirim notifikasi sistem ke para dosen penguji
+        $ujian = DB::table('akd_skripsi_ujian')->where('id_skripsi', $skripsi->id)->first();
+        if ($ujian) {
+            $mhs = DB::table('akd_mahasiswa')->where('nim', $request->nim)->first();
+            $namaMhs = $mhs ? $mhs->nama_mahasiswa : $request->nim;
+            
+            $dosenIds = array_filter([$ujian->id_penguji1, $ujian->id_penguji2, $ujian->id_penguji3]);
+            if (!empty($dosenIds)) {
+                $emails = DB::table('simpeg_pegawai')
+                    ->whereIn('id', $dosenIds)
+                    ->pluck('email_umuka')
+                    ->toArray();
+
+                foreach ($emails as $email) {
+                    if ($email) {
+                        NotificationHelper::send(
+                            $email,
+                            'Pembaruan Revisi & Luaran Ujian',
+                            "Mahasiswa {$namaMhs} ({$request->nim}) telah memperbarui tautan dokumen/luaran revisi skripsi.",
+                            'dosen/skripsi/ujian',
+                            'ujian_revisi'
+                        );
+                    }
+                }
+            }
+        }
 
         return response()->json(['success' => 'Data Realisasi Luaran Berhasil Disimpan']);
     }

@@ -694,6 +694,7 @@ class Mskripsi extends Model
         }
 
         $total_bimbingan = $skripsi ? DB::table('akd_skripsi_bimbingan')->where('id_skripsi', $skripsi->id)->whereIn('status', ['disetujui', 'disetujui_kaprodi', 'disetujui_dekan', 'revisi'])->count() : 0;
+        $luaran = $skripsi ? DB::table('akd_skripsi_luaran')->where('id_skripsi', $skripsi->id)->first() : null;
 
         // Ambil ujian dengan detail nama penguji (untuk card jadwal di dashboard)
         $ujian = null;
@@ -703,8 +704,12 @@ class Mskripsi extends Model
                 ->leftJoin('simpeg_pegawai as p1', 'u.id_penguji1', '=', 'p1.id')
                 ->leftJoin('simpeg_pegawai as p2', 'u.id_penguji2', '=', 'p2.id')
                 ->leftJoin('simpeg_pegawai as p3', 'u.id_penguji3', '=', 'p3.id')
+                ->leftJoin('akd_skripsi_berita_acara as ba', 'u.id', '=', 'ba.id_skripsi_ujian')
                 ->select(
                     'u.*',
+                    'ba.keputusan',
+                    'ba.catatan as catatan_revisi',
+                    'ba.batas_revisi',
                     DB::raw("CONCAT_WS(' ', p1.gelar_depan, p1.nama, p1.gelar_belakang) as nama_penguji1"),
                     DB::raw("CONCAT_WS(' ', p2.gelar_depan, p2.nama, p2.gelar_belakang) as nama_penguji2"),
                     DB::raw("CONCAT_WS(' ', p3.gelar_depan, p3.nama, p3.gelar_belakang) as nama_penguji3")
@@ -738,9 +743,11 @@ class Mskripsi extends Model
                'ujian_lunas' => $bayar_ujian
             ],
             'skripsi' => $skripsi,
+            'luaran' => $luaran,
             'sempro' => $sempro,
             'bimbingan' => [
                 'total' => $total_bimbingan,
+                'proses' => round(($total_bimbingan / (max(1, $mhs->ta_minimal_bimbingan))) * 100),
                 'persen' => round(($total_bimbingan / (max(1, $mhs->ta_minimal_bimbingan))) * 100)
             ],
             'ujian' => $ujian,
@@ -881,10 +888,16 @@ class Mskripsi extends Model
         }
 
         if ($ujian && $ujian->status == 'dinilai') {
+            if ($ujian_detail && $ujian_detail->keputusan == 'lulus_dengan_perbaikan') {
+                return ['label' => 'Lengkapi Realisasi Luaran & Revisi Ujian', 'url' => 'mahasiswa/skripsi/ujian', 'warna' => 'warning', 'disabled' => false];
+            }
             return ['label' => 'Menunggu Input Nilai dari Dosen Lain...', 'url' => '#', 'warna' => 'secondary', 'disabled' => true];
         }
 
         if ($ujian && $ujian->status == 'menunggu_penetapan') {
+            if ($ujian_detail && $ujian_detail->keputusan == 'lulus_dengan_perbaikan') {
+                return ['label' => 'Lengkapi Realisasi Luaran & Revisi Ujian', 'url' => 'mahasiswa/skripsi/ujian', 'warna' => 'warning', 'disabled' => false];
+            }
             return ['label' => 'Menunggu Penetapan Nilai Resmi', 'url' => '#', 'warna' => 'info', 'disabled' => true];
         }
 

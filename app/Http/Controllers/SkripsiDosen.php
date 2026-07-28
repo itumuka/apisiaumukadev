@@ -319,10 +319,17 @@ class SkripsiDosen extends Controller
             ->where('id_skripsi_ujian', $request->id_skripsi_ujian)
             ->first();
 
+        $graded_dosen_ids = DB::table('akd_skripsi_nilai_indikator')
+            ->where('id_skripsi_ujian', $request->id_skripsi_ujian)
+            ->distinct()
+            ->pluck('id_dosen')
+            ->toArray();
+
         return response()->json([
             'status' => 'success',
             'data' => $rows,
-            'berita_acara' => $ba
+            'berita_acara' => $ba,
+            'graded_dosen_ids' => $graded_dosen_ids
         ]);
     }
 
@@ -501,9 +508,11 @@ class SkripsiDosen extends Controller
             if ($id_dosen == $ujian->id_penguji1 || $id_dosen == $ujian->id_penguji2) {
                 if ($request->has('keputusan')) {
                     $baData['keputusan'] = $request->keputusan;
-                }
-                if ($request->has('batas_revisi') && $request->batas_revisi !== null) {
-                    $baData['batas_revisi'] = $request->batas_revisi;
+                    if ($request->keputusan !== 'lulus_dengan_perbaikan') {
+                        $baData['batas_revisi'] = null;
+                    } else if ($request->has('batas_revisi') && $request->batas_revisi !== null) {
+                        $baData['batas_revisi'] = $request->batas_revisi;
+                    }
                 }
             }
 

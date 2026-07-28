@@ -601,14 +601,20 @@ class Skripsi extends Controller
         $notice_message = null;
 
         if ($ujian) {
-            if (in_array($ujian->status, ['diajukan', 'disetujui', 'dijadwalkan', 'dinilai', 'menunggu_penetapan', 'ditetapkan', 'lulus', 'tidak_lulus'])) {
+            if (in_array($ujian->status, ['ditetapkan', 'lulus', 'tidak_lulus'])) {
                 $ujian_locked = true;
-                if ($ujian->status == 'diajukan') {
-                    $notice_message = 'Pendaftaran Ujian Terkirim – Menunggu Penjadwalan Kaprodi.';
-                } else if (in_array($ujian->status, ['disetujui', 'dijadwalkan'])) {
-                    $notice_message = 'Pendaftaran Ujian Telah Disetujui & Dijadwalkan oleh Kaprodi.';
+                $notice_message = 'Ujian Anda telah selesai dilaksanakan & nilai telah difinalisasi.';
+            } else if ($ujian->status == 'diajukan') {
+                $notice_message = 'Pendaftaran Ujian Terkirim – Menunggu Penjadwalan Kaprodi.';
+            } else if (in_array($ujian->status, ['disetujui', 'dijadwalkan'])) {
+                $notice_message = 'Pendaftaran Ujian Telah Disetujui & Dijadwalkan oleh Kaprodi.';
+            } else if (in_array($ujian->status, ['dinilai', 'menunggu_penetapan'])) {
+                // Not locked, but show a notice about grading/revision!
+                $ba = DB::table('akd_skripsi_berita_acara')->where('id_skripsi_ujian', $ujian->id)->first();
+                if ($ba && $ba->keputusan == 'lulus_dengan_perbaikan') {
+                    $notice_message = 'Keputusan: Lulus dengan Perbaikan (Revisi). Silakan perbarui judul/link luaran & naskah jika diperlukan sebelum masa revisi berakhir (' . ($ba->batas_revisi ? date('d-m-Y', strtotime($ba->batas_revisi)) : '-') . ').';
                 } else {
-                    $notice_message = 'Ujian Anda telah selesai dilaksanakan.';
+                    $notice_message = 'Ujian selesai. Silakan sesuaikan/lengkapi link luaran jurnal/berkas pendukung jika diperlukan.';
                 }
             }
         }
@@ -737,8 +743,14 @@ class Skripsi extends Controller
             ->first();
 
         if (!$ujian || $ujian->status !== 'pending') {
-            if ($ujian && in_array($ujian->status, ['diajukan', 'dijadwalkan', 'lulus'])) {
-                return response()->json(['error' => 'Pendaftaran ujian sudah diajukan sebelumnya.'], 409);
+            if ($ujian && in_array($ujian->status, ['diajukan', 'disetujui', 'dijadwalkan', 'dinilai', 'menunggu_penetapan', 'ditetapkan', 'lulus', 'tidak_lulus'])) {
+                // If title (judul) is updated, save it
+                if ($request->has('judul') && !empty($request->judul)) {
+                    DB::table('akd_skripsi')
+                        ->where('id', $skripsi->id)
+                        ->update(['judul' => $request->judul]);
+                }
+                return response()->json(['success' => 'Pembaruan data pendaftaran ujian berhasil disimpan.']);
             }
             return response()->json(['error' => 'Anda belum mendapatkan persetujuan (ACC Ujian) dari Dosen Pembimbing.'], 403);
         }

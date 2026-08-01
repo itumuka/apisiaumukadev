@@ -2906,4 +2906,113 @@ class Akademik extends Controller
             'Cache-Control' => 'max-age=0',
         ]);
     }
+
+    public function get_all_transkrip_ajuan(Request $request)
+    {
+        $status = $request->status;
+        $query = DB::table('akd_transkrip_ajuan')
+            ->join('akd_mahasiswa', 'akd_transkrip_ajuan.nim', '=', 'akd_mahasiswa.nim')
+            ->join('akd_program_studi', 'akd_mahasiswa.kode_program_studi', '=', 'akd_program_studi.kode_program_studi')
+            ->select(
+                'akd_transkrip_ajuan.*',
+                'akd_mahasiswa.nama_mahasiswa',
+                'akd_program_studi.nama_program_studi'
+            );
+
+        if ($status) {
+            $query->where('akd_transkrip_ajuan.status', $status);
+        }
+
+        $data = $query->orderBy('akd_transkrip_ajuan.id', 'desc')->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $data
+        ]);
+    }
+
+    public function approve_transkrip_ajuan(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'id' => 'required',
+            'no_transkrip' => 'required|string|max:100',
+            'approved_by' => 'required|string|max:50'
+        ]);
+        if ($v->fails()) return response()->json(['error' => $v->errors()->all()], 422);
+
+        $id = $request->id;
+        $no_transkrip = $request->no_transkrip;
+        $approved_by = $request->approved_by;
+
+        $ajuan = DB::table('akd_transkrip_ajuan')->where('id', $id)->first();
+        if (!$ajuan) {
+            return response()->json(['error' => 'Data pengajuan tidak ditemukan.'], 404);
+        }
+
+        // Update status ajuan
+        DB::table('akd_transkrip_ajuan')->where('id', $id)->update([
+            'status' => 'approved',
+            'no_transkrip' => $no_transkrip,
+            'approved_by' => $approved_by,
+            'approved_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        // Sinkronisasi ke akd_kelengkapan_transkrip
+        $checkKelengkapan = DB::table('akd_kelengkapan_transkrip')->where('nim', $ajuan->nim)->first();
+        if ($checkKelengkapan) {
+            DB::table('akd_kelengkapan_transkrip')->where('nim', $ajuan->nim)->update([
+                'no_transkrip' => $no_transkrip,
+                'updated_at' => now()
+            ]);
+        } else {
+            DB::table('akd_kelengkapan_transkrip')->insert([
+                'nim' => $ajuan->nim,
+                'no_transkrip' => $no_transkrip,
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Pengajuan transkrip berhasil disetujui!'
+        ]);
+    }
+
+    public function cancel_transkrip_ajuan(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'id' => 'required'
+        ]);
+        if ($v->fails()) return response()->json(['error' => $v->errors()], 422);
+
+        $id = $request->id;
+
+        $ajuan = DB::table('akd_transkrip_ajuan')->where('id', $id)->first();
+        if (!$ajuan) {
+            return response()->json(['error' => 'Data pengajuan tidak ditemukan.'], 404);
+        }
+
+        // Setel kembali status ke pending
+        DB::table('akd_transkrip_ajuan')->where('id', $id)->update([
+            'status' => 'pending',
+            'no_transkrip' => null,
+            'approved_by' => null,
+            'approved_at' => null,
+            'updated_at' => now()
+        ]);
+
+        // Hapus no_transkrip di akd_kelengkapan_transkrip
+        DB::table('akd_kelengkapan_transkrip')->where('nim', $ajuan->nim)->update([
+            'no_transkrip' => null,
+            'updated_at' => now()
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Persetujuan pengajuan transkrip berhasil dibatalkan.'
+        ]);
+    }
 }
+

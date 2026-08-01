@@ -497,4 +497,12 @@ Route::middleware(['jwtverifie'])->group(function () {
     // System Notifications API
     Route::get("/notifications", "NotificationController@get_notifications")->name('sys_notifications_list');
     Route::post("/notifications/read", "NotificationController@mark_as_read")->name('sys_notifications_read');
+
+    // Transkrip Ajuan APIs
+    Route::get("/mahasiswa/transkrip-ajuan", "Mahasiswa@get_transkrip_ajuan")->name('mahasiswa_get_transkrip_ajuan');
+    Route::post("/mahasiswa/transkrip-ajuan", "Mahasiswa@submit_transkrip_ajuan")->name('mahasiswa_submit_transkrip_ajuan');
+    Route::get("/akademik/transkrip-ajuan", "Akademik@get_all_transkrip_ajuan")->name('akademik_get_all_transkrip_ajuan');
+    Route::post("/akademik/transkrip-ajuan/approve", "Akademik@approve_transkrip_ajuan")->name('akademik_approve_transkrip_ajuan');
+    Route::post("/akademik/transkrip-ajuan/cancel", "Akademik@cancel_transkrip_ajuan")->name('akademik_cancel_transkrip_ajuan');
 });
+

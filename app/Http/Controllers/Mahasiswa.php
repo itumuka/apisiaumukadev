@@ -610,4 +610,60 @@ class Mahasiswa extends Controller
             'source' => 'fallback'
         ]);
     }
+
+    public function get_transkrip_ajuan(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'nim' => 'required'
+        ]);
+        if ($v->fails()) return response()->json(['error' => $v->errors()], 422);
+
+        $nim = $request->nim;
+        $history = DB::table('akd_transkrip_ajuan')
+            ->where('nim', $nim)
+            ->orderBy('id', 'desc')
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $history
+        ]);
+    }
+
+    public function submit_transkrip_ajuan(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'nim' => 'required'
+        ]);
+        if ($v->fails()) return response()->json(['error' => $v->errors()], 422);
+
+        $nim = $request->nim;
+
+        // Cek jika ada ajuan yang masih pending
+        $checkPending = DB::table('akd_transkrip_ajuan')
+            ->where('nim', $nim)
+            ->where('status', 'pending')
+            ->first();
+
+        if ($checkPending) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Anda masih memiliki pengajuan transkrip yang sedang diproses.'
+            ], 400);
+        }
+
+        DB::table('akd_transkrip_ajuan')->insert([
+            'nim' => $nim,
+            'tanggal_ajuan' => now()->toDateString(),
+            'status' => 'pending',
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Pengajuan transkrip nilai berhasil dikirimkan.'
+        ]);
+    }
 }
+

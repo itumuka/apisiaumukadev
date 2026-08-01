@@ -683,6 +683,10 @@ class Mahasiswa extends Controller
             ], 400);
         }
 
+        $mhs = DB::table('akd_mahasiswa')->where('nim', $nim)->first();
+        $namaMhs = $mhs ? $mhs->nama_mahasiswa : $nim;
+        $tipeLabel = $tipe === 'rekap' ? 'Rekap Nilai' : 'Transkrip Nilai';
+
         DB::table('akd_transkrip_ajuan')->insert([
             'nim' => $nim,
             'tipe' => $tipe,
@@ -691,6 +695,23 @@ class Mahasiswa extends Controller
             'created_at' => now(),
             'updated_at' => now()
         ]);
+
+        // Kirim notifikasi ke user Akademik dan Super Admin
+        $staffUsers = DB::table('user as a')
+            ->leftJoin('group_user as b', 'a.kode_group', '=', 'b.id_group')
+            ->whereIn('b.nm_module', ['Akademik', 'Super Admin'])
+            ->select('a.username')
+            ->get();
+
+        foreach ($staffUsers as $u) {
+            \App\Helpers\NotificationHelper::send(
+                $u->username,
+                'Pengajuan ' . $tipeLabel,
+                "Mahasiswa {$namaMhs} ({$nim}) mengajukan penerbitan {$tipeLabel}.",
+                '/akademik/persetujuan-transkrip',
+                'transkrip'
+            );
+        }
 
         return response()->json([
             'status' => 'success',

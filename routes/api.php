@@ -76,6 +76,13 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::get("/mahasiswa/check-edom", "Mahasiswa@checkedom")->name('mhscheckedom');
     Route::get('/mahasiswa/getbukti', 'Mahasiswa@getBukti')->name('mhsgetbukti');
 
+    // SKPI & Semester Verification Routes
+    Route::get("/mahasiswa/check-verifikasi-semester", "Mahasiswa@check_verifikasi_semester")->name('mhscheck_verifikasi_semester');
+    Route::post("/mahasiswa/submit-verifikasi-semester", "Mahasiswa@submit_verifikasi_semester")->name('mhssubmit_verifikasi_semester');
+    Route::get("/mahasiswa/get-skpi-prestasi", "Mahasiswa@get_skpi_prestasi")->name('mhsget_skpi_prestasi');
+    Route::post("/mahasiswa/add-skpi-prestasi", "Mahasiswa@add_skpi_prestasi")->name('mhsadd_skpi_prestasi');
+    Route::post("/mahasiswa/delete-skpi-prestasi", "Mahasiswa@delete_skpi_prestasi")->name('mhsdelete_skpi_prestasi');
+
     Route::get("/dekanat/data-acckrs", "Dekanat@data_acckrs")->name('dkndatacckrs');
     Route::post("/dekanat/edit_password_dekanadmin", "Dekanat@edit_password_dekanadmin")->name('edit_password_dekanadmin');
     // Route::get("/dekanat/data-makulpenawaran", "Dekanat@data_makulpenawaran")->name('dkndata_makulpenawaran');

@@ -371,5 +371,179 @@ class Mahasiswa extends Controller
     {
         $getBukti = $this->mahasiswa->getBukti($request);
         return $getBukti;
-    }    
+    }
+
+    public function check_verifikasi_semester(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'nim' => 'required',
+            'tahun' => 'required',
+            'semester' => 'required'
+        ]);
+        if ($v->fails()) return response()->json(['error' => $v->errors()], 422);
+
+        $nim = $request->nim;
+        $tahun = $request->tahun;
+        $semester = $request->semester;
+
+        $check = DB::table('akd_mahasiswa_verifikasi_semester')
+            ->where('nim', $nim)
+            ->where('tahun', $tahun)
+            ->where('semester', $semester)
+            ->first();
+
+        // Check if mandatory profile fields are completed
+        $mhs = DB::table('akd_mahasiswa')->where('nim', $nim)->first();
+        $is_profile_complete = true;
+        if ($mhs) {
+            if (empty($mhs->nik_mhs) || empty($mhs->tempat_lahir) || empty($mhs->alamat_asal) || empty($mhs->pendidikan_terakhir)) {
+                $is_profile_complete = false;
+            }
+        } else {
+            $is_profile_complete = false;
+        }
+
+        // Check parents
+        $ayah = DB::table('akd_ortu_ayah')->where('nim', $nim)->first();
+        if (!$ayah || empty($ayah->nama) || empty($ayah->nik_ayah)) {
+            $is_profile_complete = false;
+        }
+
+        $ibu = DB::table('akd_ortu_ibu')->where('nim', $nim)->first();
+        if (!$ibu || empty($ibu->nama) || empty($ibu->nik_ibu)) {
+            $is_profile_complete = false;
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'is_verified' => $check ? (int)$check->is_verified : 0,
+            'is_profile_complete' => $is_profile_complete ? 1 : 0
+        ]);
+    }
+
+    public function submit_verifikasi_semester(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'nim' => 'required',
+            'tahun' => 'required',
+            'semester' => 'required'
+        ]);
+        if ($v->fails()) return response()->json(['error' => $v->errors()], 422);
+
+        $nim = $request->nim;
+        $tahun = $request->tahun;
+        $semester = $request->semester;
+
+        DB::table('akd_mahasiswa_verifikasi_semester')->updateOrInsert(
+            ['nim' => $nim, 'tahun' => $tahun, 'semester' => $semester],
+            ['is_verified' => 1, 'verified_at' => now(), 'updated_at' => now()]
+        );
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Konfirmasi verifikasi data semester berjalan berhasil disimpan!'
+        ]);
+    }
+
+    public function get_skpi_prestasi(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'nim' => 'required'
+        ]);
+        if ($v->fails()) return response()->json(['error' => $v->errors()], 422);
+
+        $nim = $request->nim;
+        $prestasi = DB::table('akd_skpi_prestasi')
+            ->where('nim', $nim)
+            ->orderBy('tanggal_perolehan', 'desc')
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $prestasi
+        ]);
+    }
+
+    public function add_skpi_prestasi(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'nim' => 'required',
+            'nama_kegiatan_id' => 'required|string|max:255',
+            'nama_kegiatan_en' => 'required|string|max:255',
+            'kategori' => 'required|string|max:50',
+            'peran_id' => 'required|string|max:100',
+            'peran_en' => 'required|string|max:100',
+            'penyelenggara_id' => 'required|string|max:255',
+            'penyelenggara_en' => 'required|string|max:255',
+            'tanggal_perolehan' => 'required|date',
+            'file_bukti' => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120' // Max 5MB
+        ]);
+
+        if ($v->fails()) return response()->json(['error' => $v->errors()->all()], 422);
+
+        $nim = $request->nim;
+        $path = '';
+        if ($request->hasFile('file_bukti')) {
+            $file = $request->file('file_bukti');
+            $filename = "SKPI_" . time() . "_" . $file->getClientOriginalName();
+            $path = $file->storeAs("public/skpi_prestasi/{$nim}", $filename);
+        }
+
+        DB::table('akd_skpi_prestasi')->insert([
+            'nim' => $nim,
+            'nama_kegiatan_id' => $request->nama_kegiatan_id,
+            'nama_kegiatan_en' => $request->nama_kegiatan_en,
+            'kategori' => $request->kategori,
+            'peran_id' => $request->peran_id,
+            'peran_en' => $request->peran_en,
+            'penyelenggara_id' => $request->penyelenggara_id,
+            'penyelenggara_en' => $request->penyelenggara_en,
+            'tanggal_perolehan' => $request->tanggal_perolehan,
+            'path_bukti' => $path,
+            'status_verifikasi' => 'pending',
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Data prestasi/sertifikasi SKPI berhasil ditambahkan!'
+        ]);
+    }
+
+    public function delete_skpi_prestasi(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'id' => 'required',
+            'nim' => 'required'
+        ]);
+        if ($v->fails()) return response()->json(['error' => $v->errors()], 422);
+
+        $id = $request->id;
+        $nim = $request->nim;
+
+        $check = DB::table('akd_skpi_prestasi')->where('id', $id)->first();
+        if (!$check) {
+            return response()->json(['error' => 'Data tidak ditemukan.'], 404);
+        }
+
+        if ($check->nim !== $nim) {
+            return response()->json(['error' => 'Anda tidak memiliki akses ke data ini.'], 403);
+        }
+
+        if ($check->status_verifikasi === 'disetujui') {
+            return response()->json(['error' => 'Data yang sudah disetujui tidak dapat dihapus.'], 403);
+        }
+
+        if ($check->path_bukti && \Illuminate\Support\Facades\Storage::exists($check->path_bukti)) {
+            \Illuminate\Support\Facades\Storage::delete($check->path_bukti);
+        }
+
+        DB::table('akd_skpi_prestasi')->where('id', $id)->delete();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Data prestasi/sertifikasi SKPI berhasil dihapus!'
+        ]);
+    }
 }

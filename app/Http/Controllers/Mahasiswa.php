@@ -546,4 +546,68 @@ class Mahasiswa extends Controller
             'message' => 'Data prestasi/sertifikasi SKPI berhasil dihapus!'
         ]);
     }
+
+    public function translate(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'text' => 'required|string|max:5000'
+        ]);
+        if ($v->fails()) return response()->json(['error' => $v->errors()], 422);
+
+        $text = trim($request->text);
+        if (empty($text)) {
+            return response()->json(['status' => 'success', 'translated_text' => '']);
+        }
+
+        $hash = md5(strtolower($text));
+
+        // 1. Cek cache lokal
+        $cached = DB::table('sys_translation_cache')->where('md5_hash', $hash)->first();
+        if ($cached) {
+            return response()->json([
+                'status' => 'success',
+                'translated_text' => $cached->text_translated,
+                'source' => 'cache'
+            ]);
+        }
+
+        // 2. Hubungi MyMemory Translation API
+        try {
+            $res = \Illuminate\Support\Facades\Http::timeout(5)->get('https://api.mymemory.translated.net/get', [
+                'q' => $text,
+                'langpair' => 'id|en'
+            ]);
+            
+            if ($res->successful()) {
+                $data = $res->json();
+                if (isset($data['responseData']['translatedText'])) {
+                    $translated = trim($data['responseData']['translatedText']);
+                    
+                    // Simpan ke cache
+                    DB::table('sys_translation_cache')->insertOrIgnore([
+                        'text_source' => $text,
+                        'text_translated' => $translated,
+                        'md5_hash' => $hash,
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]);
+
+                    return response()->json([
+                        'status' => 'success',
+                        'translated_text' => $translated,
+                        'source' => 'api'
+                    ]);
+                }
+            }
+        } catch (\Exception $e) {
+            // Fallback
+        }
+
+        // Fallback: kembalikan teks asli jika API luar error/timeout
+        return response()->json([
+            'status' => 'success',
+            'translated_text' => $text,
+            'source' => 'fallback'
+        ]);
+    }
 }

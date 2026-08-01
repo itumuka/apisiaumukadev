@@ -82,6 +82,7 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::get("/mahasiswa/get-skpi-prestasi", "Mahasiswa@get_skpi_prestasi")->name('mhsget_skpi_prestasi');
     Route::post("/mahasiswa/add-skpi-prestasi", "Mahasiswa@add_skpi_prestasi")->name('mhsadd_skpi_prestasi');
     Route::post("/mahasiswa/delete-skpi-prestasi", "Mahasiswa@delete_skpi_prestasi")->name('mhsdelete_skpi_prestasi');
+    Route::post("/mahasiswa/translate", "Mahasiswa@translate")->name('mhs_translate');
 
     Route::get("/dekanat/data-acckrs", "Dekanat@data_acckrs")->name('dkndatacckrs');
     Route::post("/dekanat/edit_password_dekanadmin", "Dekanat@edit_password_dekanadmin")->name('edit_password_dekanadmin');

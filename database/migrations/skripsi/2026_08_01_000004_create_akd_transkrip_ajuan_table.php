@@ -17,7 +17,9 @@ class CreateAkdTranskripAjuanTable extends Migration
             $table->id();
             $table->string('nim', 15)->index();
             $table->date('tanggal_ajuan');
+            $table->enum('tipe', ['transkrip', 'rekap'])->default('transkrip');
             $table->string('no_transkrip', 100)->nullable();
+
             $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending');
             $table->string('approved_by', 50)->nullable();
             $table->datetime('approved_at')->nullable();

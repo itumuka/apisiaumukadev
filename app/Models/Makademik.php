@@ -3581,6 +3581,7 @@ GROUP BY akd_matakuliah.id_matakuliah ORDER BY akd_transkrip.id_matakuliah ASC
     public function gettranskipnilai_cetak(Request $request)
     {
         $gettranskipnilai_cetak = DB::select("SELECT akd_mahasiswa.*,adm_camaba.*,akd_program_studi.*,akd_fakultas.*,akd_kelengkapan_transkrip.*,CONCAT(gelar_depan,' ',simpeg_pegawai.nama,', ',gelar_belakang) AS namakaprodi,(SELECT CONCAT(gelar_depan,' ',nama,' ',gelar_belakang) FROM simpeg_pegawai WHERE id=akd_fakultas.pimpinan) AS namadekan,(SELECT COALESCE(nip, nidn, '-') FROM simpeg_pegawai WHERE id=akd_fakultas.pimpinan) AS nipdekan,
+        (SELECT tipe FROM akd_transkrip_ajuan WHERE nim = akd_mahasiswa.nim AND status = 'approved' ORDER BY id DESC LIMIT 1) AS tipe_ajuan,
         DATE_FORMAT(
             COALESCE(
                 (SELECT u.tanggal_ujian 

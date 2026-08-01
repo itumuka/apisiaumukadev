@@ -633,11 +633,42 @@ class Mahasiswa extends Controller
     public function submit_transkrip_ajuan(Request $request)
     {
         $v = Validator::make($request->all(), [
-            'nim' => 'required'
+            'nim' => 'required',
+            'tipe' => 'required|in:transkrip,rekap'
         ]);
         if ($v->fails()) return response()->json(['error' => $v->errors()], 422);
 
         $nim = $request->nim;
+        $tipe = $request->tipe;
+
+        // Validasi Kelulusan jika tipe Transkrip Nilai
+        if ($tipe === 'transkrip') {
+            $hasGraduationDate = false;
+            
+            $kelengkapan = DB::table('akd_kelengkapan_transkrip')
+                ->where('nim', $nim)
+                ->whereNotNull('tanggal_lulus')
+                ->first();
+            if ($kelengkapan) {
+                $hasGraduationDate = true;
+            } else {
+                $ba = DB::table('akd_skripsi_berita_acara')
+                    ->where('nim', $nim)
+                    ->where('status', 'selesai')
+                    ->whereIn('keputusan', ['lulus', 'lulus_dengan_perbaikan'])
+                    ->first();
+                if ($ba) {
+                    $hasGraduationDate = true;
+                }
+            }
+            
+            if (!$hasGraduationDate) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Anda belum dinyatakan lulus. Silakan pilih tipe Rekap Nilai.'
+                ], 400);
+            }
+        }
 
         // Cek jika ada ajuan yang masih pending
         $checkPending = DB::table('akd_transkrip_ajuan')
@@ -654,6 +685,7 @@ class Mahasiswa extends Controller
 
         DB::table('akd_transkrip_ajuan')->insert([
             'nim' => $nim,
+            'tipe' => $tipe,
             'tanggal_ajuan' => now()->toDateString(),
             'status' => 'pending',
             'created_at' => now(),

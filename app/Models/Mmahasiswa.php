@@ -1194,15 +1194,67 @@ class Mmahasiswa extends Model
             ]);
         return $edit_camaba;
     }
+    private function parseIndoDateToYmd($dateStr)
+    {
+        $months = [
+            'januari' => '01', 'january' => '01', 'jan' => '01',
+            'februari' => '02', 'febuari' => '02', 'february' => '02', 'feb' => '02',
+            'maret' => '03', 'march' => '03', 'mar' => '03',
+            'april' => '04', 'apr' => '04',
+            'mei' => '05', 'may' => '05',
+            'juni' => '06', 'june' => '06', 'jun' => '06',
+            'juli' => '07', 'july' => '07', 'jul' => '07',
+            'agustus' => '08', 'august' => '08', 'agu' => '08', 'aug' => '08',
+            'september' => '09', 'sep' => '09',
+            'oktober' => '10', 'october' => '10', 'okt' => '10', 'oct' => '10',
+            'november' => '11', 'nov' => '11',
+            'desember' => '12', 'december' => '12', 'des' => '12', 'dec' => '12'
+        ];
+        
+        if (preg_match('/(\d{1,2})\s+([a-zA-Z]+)\s+(\d{4})/', $dateStr, $matches)) {
+            $day = str_pad($matches[1], 2, '0', STR_PAD_LEFT);
+            $mName = strtolower($matches[2]);
+            $year = $matches[3];
+            if (isset($months[$mName])) {
+                return "$year-{$months[$mName]}-$day";
+            }
+        }
+        return null;
+    }
+
     public function simpan_user_profil(Request $request)
     {
+        $tempat_lahir = trim($request->tempat_lahir ?? '');
+        $tanggal_lahir = trim($request->tanggal_lahir ?? '');
+
+        // Sanitasi jika tempat_lahir memuat tanggal lahir secara tidak sengaja
+        if (preg_match('/^(.*?)(?:,\s*|\s*\/\s*|\s+)(\d{1,2}\s+[a-zA-Z]+\s+\d{4})$/i', $tempat_lahir, $m)) {
+            $cleanPlace = trim(rtrim($m[1], ',/'));
+            $parsedDate = $this->parseIndoDateToYmd($m[2]);
+            if ($parsedDate) {
+                $tempat_lahir = $cleanPlace;
+                if (empty($tanggal_lahir) || $tanggal_lahir === '0000-00-00') {
+                    $tanggal_lahir = $parsedDate;
+                }
+            }
+        } else if (preg_match('/^(.*?)(?:,\s*|\s*\/\s*|\s+)(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/', $tempat_lahir, $m)) {
+            $cleanPlace = trim(rtrim($m[1], ',/'));
+            $day = str_pad($m[2], 2, '0', STR_PAD_LEFT);
+            $month = str_pad($m[3], 2, '0', STR_PAD_LEFT);
+            $year = $m[4];
+            $tempat_lahir = $cleanPlace;
+            if (empty($tanggal_lahir) || $tanggal_lahir === '0000-00-00') {
+                $tanggal_lahir = "$year-$month-$day";
+            }
+        }
+
         $simpanmahasiswa = DB::table('akd_mahasiswa')
             ->where('nim', $request->nim)
             ->update([
                 'nik_mhs'  =>  $request->nik_mhs,
                 // 'nama_mahasiswa'  =>  $request->nama_lengkap,
-                'tempat_lahir'  =>  $request->tempat_lahir,
-                'tanggal_lahir'  =>  $request->tanggal_lahir,
+                'tempat_lahir'  =>  $tempat_lahir,
+                'tanggal_lahir'  =>  !empty($tanggal_lahir) ? $tanggal_lahir : null,
                 'jenis_kelamin'  =>  $request->jk,
                 'kode_agama'  =>  $request->editagama,
                 'alamat_asal'  =>  $request->alamat_lengkap,
@@ -1231,8 +1283,8 @@ class Mmahasiswa extends Model
             'kode_pos'  =>  $request->kode_pos,
             'nik'  =>  $request->nik_mhs,
             // 'nama_camaba'  =>  $request->nama_lengkap,
-            'tempat_lahir'  =>  $request->tempat_lahir,
-            'tanggal_lahir'  =>  $request->tanggal_lahir,
+            'tempat_lahir'  =>  $tempat_lahir,
+            'tanggal_lahir'  =>  !empty($tanggal_lahir) ? $tanggal_lahir : null,
             'jenis_kelamin'  =>  $request->jk,
             'kode_agama'  =>  $request->editagama,
             'kode_kewarganegaraan'  =>  $request->kwg,

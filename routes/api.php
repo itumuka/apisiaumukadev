@@ -246,6 +246,7 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::post("/akademik/edit-matakuliah", "Akademik@edit_matakuliah")->name('edit_matakuliah');
     Route::get("/akademik/hapus-matakuliah", "Akademik@hapus_matakuliah")->name('hapus_matakuliah');
     Route::get("/akademik/ubahstatus-matakuliah", "Akademik@ubahstatus_matakuliah")->name('ubahstatus_matakuliah');
+    Route::post("/akademik/update-translate-matakuliah", "Akademik@update_translate_matakuliah")->name('ak_update_translate_matakuliah');
     // Dosen
     Route::get("/akademik/dosen", "Akademik@dosen")->name('akdosen');
     Route::get("/akademik/qrdosen", "Akademik@qrdosen")->name('akqrdosen');

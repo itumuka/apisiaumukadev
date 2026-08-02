@@ -1657,6 +1657,17 @@ class Akademik extends Controller
         return $datamatakuliah;
     }
 
+    public function update_translate_matakuliah(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'id_matakuliah'          => 'required',
+            'nama_matakuliah_inggris' => 'required|string|max:500'
+        ]);
+        if ($v->fails()) return response()->json(['error' => $v->errors()], 422);
+
+        $this->akademik->update_translate_matakuliah($request);
+        return response()->json(['success' => 'Nama Inggris berhasil disimpan.']);
+    }
 
     public function simpan_matakuliah(Request $request)
     {

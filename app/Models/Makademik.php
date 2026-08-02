@@ -1940,6 +1940,12 @@ TIME_FORMAT(jam_mulai, '%H:%i') AS jam_mulai, TIME_FORMAT(jam_selesai, '%H:%i') 
         return $matakuliah;
     }
 
+    public function update_translate_matakuliah(Request $request)
+    {
+        return DB::table('akd_matakuliah')
+            ->where('id_matakuliah', $request->id_matakuliah)
+            ->update(['nama_matakuliah_inggris' => $request->nama_matakuliah_inggris]);
+    }
 
     public function simpan_matakuliah(Request $request)
     {

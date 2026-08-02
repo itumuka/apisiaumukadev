@@ -696,10 +696,10 @@ class Mahasiswa extends Controller
             'updated_at' => now()
         ]);
 
-        // Kirim notifikasi ke user Akademik dan Super Admin
+        // Kirim notifikasi ke user Akademik, Super Admin, dan Dekanat
         $staffUsers = DB::table('user as a')
             ->leftJoin('group_user as b', 'a.kode_group', '=', 'b.id_group')
-            ->whereIn('b.nm_module', ['Akademik', 'Super Admin'])
+            ->whereIn('b.nm_module', ['Akademik', 'Super Admin', 'Dekanat'])
             ->select('a.username')
             ->get();
 

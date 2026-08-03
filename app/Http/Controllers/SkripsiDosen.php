@@ -249,7 +249,11 @@ class SkripsiDosen extends Controller
                 // graded_by_me: apakah dosen ini sudah menginput nilai indikator
                 DB::raw("(SELECT COUNT(*) FROM akd_skripsi_nilai_indikator ni WHERE ni.id_skripsi_ujian = u.id AND ni.id_dosen = {$id_dosen} LIMIT 1) as graded_by_me"),
                 // nilai_angka_dosen: rata-rata nilai indikator dosen ini (untuk tampilan personal)
-                DB::raw("(SELECT AVG(ni.nilai) FROM akd_skripsi_nilai_indikator ni WHERE ni.id_skripsi_ujian = u.id AND ni.id_dosen = {$id_dosen}) as nilai_angka_dosen")
+                DB::raw("(SELECT AVG(ni.nilai) FROM akd_skripsi_nilai_indikator ni WHERE ni.id_skripsi_ujian = u.id AND ni.id_dosen = {$id_dosen}) as nilai_angka_dosen"),
+                // graded_penguji1/2/3: apakah penguji tsb sudah input nilai (untuk visibility antar penguji)
+                DB::raw("(SELECT COUNT(*) FROM akd_skripsi_nilai_indikator ni WHERE ni.id_skripsi_ujian = u.id AND ni.id_dosen = u.id_penguji1 LIMIT 1) as graded_penguji1"),
+                DB::raw("(SELECT COUNT(*) FROM akd_skripsi_nilai_indikator ni WHERE ni.id_skripsi_ujian = u.id AND ni.id_dosen = u.id_penguji2 LIMIT 1) as graded_penguji2"),
+                DB::raw("(SELECT COUNT(*) FROM akd_skripsi_nilai_indikator ni WHERE ni.id_skripsi_ujian = u.id AND ni.id_dosen = u.id_penguji3 LIMIT 1) as graded_penguji3")
             )
             ->where(function ($query) use ($id_dosen) {
                 $query->where('u.id_penguji1', $id_dosen)

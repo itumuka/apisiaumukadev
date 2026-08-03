@@ -1332,7 +1332,11 @@ class SkripsiKaprodi extends Controller
             $query->where('prodi.kode_fakultas', $kode_fakultas);
         }
 
-        $data = $query->whereIn('u.status', ['menunggu_penetapan', 'ditetapkan', 'lulus', 'tidak_lulus'])->get();
+        $data = $query
+            ->whereNotNull('u.id_penguji1') // hanya yang sudah diploting (ada penguji)
+            ->orderByRaw('ISNULL(u.tanggal_ujian) ASC')
+            ->orderBy('u.tanggal_ujian', 'desc')
+            ->get();
 
         return response()->json($data);
     }

@@ -212,6 +212,7 @@ class SkripsiDosen extends Controller
             ->leftJoin('simpeg_pegawai as peg2', 'u.id_penguji2', '=', 'peg2.id')
             ->leftJoin('simpeg_pegawai as peg3', 'u.id_penguji3', '=', 'peg3.id')
             ->leftJoin('akd_skripsi_luaran as l', 's.id', '=', 'l.id_skripsi')
+            ->leftJoin('akd_skripsi_berita_acara as ba', 'u.id', '=', 'ba.id_skripsi_ujian')
             ->select(
                 'u.id as id_skripsi_ujian',
                 'u.id_skripsi',
@@ -237,14 +238,25 @@ class SkripsiDosen extends Controller
                 DB::raw("CONCAT_WS(' ', peg2.gelar_depan, peg2.nama, peg2.gelar_belakang) as nama_penguji2"),
                 DB::raw("CONCAT_WS(' ', peg3.gelar_depan, peg3.nama, peg3.gelar_belakang) as nama_penguji3"),
                 'l.url_link',
-                'l.jenis_luaran'
+                'l.jenis_luaran',
+                // BA info
+                'ba.nilai_angka as ba_nilai_angka',
+                'ba.nilai_huruf as ba_nilai_huruf',
+                'ba.setuju_penguji1',
+                'ba.setuju_penguji2',
+                'ba.setuju_penguji3',
+                DB::raw("CASE WHEN ba.setuju_penguji1 IS NOT NULL AND ba.setuju_penguji2 IS NOT NULL AND ba.setuju_penguji3 IS NOT NULL THEN 1 ELSE 0 END as all_signed"),
+                // graded_by_me: apakah dosen ini sudah menginput nilai indikator
+                DB::raw("(SELECT COUNT(*) FROM akd_skripsi_nilai_indikator ni WHERE ni.id_skripsi_ujian = u.id AND ni.id_dosen = {$id_dosen} LIMIT 1) as graded_by_me"),
+                // nilai_angka_dosen: rata-rata nilai indikator dosen ini (untuk tampilan personal)
+                DB::raw("(SELECT AVG(ni.nilai) FROM akd_skripsi_nilai_indikator ni WHERE ni.id_skripsi_ujian = u.id AND ni.id_dosen = {$id_dosen}) as nilai_angka_dosen")
             )
             ->where(function ($query) use ($id_dosen) {
                 $query->where('u.id_penguji1', $id_dosen)
                       ->orWhere('u.id_penguji2', $id_dosen)
                       ->orWhere('u.id_penguji3', $id_dosen);
             })
-            ->whereNotNull('u.tanggal_ujian')
+            ->orderByRaw('ISNULL(u.tanggal_ujian) ASC')
             ->orderBy('u.tanggal_ujian', 'desc')
             ->get();
 
@@ -258,6 +270,7 @@ class SkripsiDosen extends Controller
             } else {
                 $r->role_dosen = null;
             }
+            $r->graded_by_me = (int) $r->graded_by_me;
         }
 
         return response()->json([

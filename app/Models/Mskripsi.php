@@ -861,29 +861,34 @@ class Mskripsi extends Model
             return ['label' => 'Pendaftaran Ujian Terkirim – Menunggu Penjadwalan Kaprodi', 'url' => '#', 'warna' => 'info', 'disabled' => true];
         }
 
+        // Build schedule extra_data for the info card
+        $extra_data = null;
+        if ($ujian_detail && in_array($ujian_detail->status, ['disetujui', 'dijadwalkan', 'dinilai', 'menunggu_penetapan', 'ditetapkan', 'lulus'])) {
+            $penguji = [];
+            $role1 = $is_obe ? 'Verifikator 1' : 'Penguji 1 (Ketua)';
+            $role2 = $is_obe ? 'Verifikator 2' : 'Penguji 2';
+            $role3 = $is_obe ? 'Verifikator 3' : 'Penguji 3';
+
+            if ($ujian_detail->id_penguji1 && !empty(trim($ujian_detail->nama_penguji1)))
+                $penguji[] = ['nama' => trim($ujian_detail->nama_penguji1), 'peran' => $role1];
+            if ($ujian_detail->id_penguji2 && !empty(trim($ujian_detail->nama_penguji2)))
+                $penguji[] = ['nama' => trim($ujian_detail->nama_penguji2), 'peran' => $role2];
+            if ($ujian_detail->id_penguji3 && !empty(trim($ujian_detail->nama_penguji3)))
+                $penguji[] = ['nama' => trim($ujian_detail->nama_penguji3), 'peran' => $role3];
+
+            $extra_data = [
+                'tgl_ujian'  => $ujian_detail->tanggal_ujian,
+                'jam_mulai'  => $ujian_detail->jam_mulai,
+                'jam_selesai'=> $ujian_detail->jam_selesai,
+                'ruang'      => $ujian_detail->ruang,
+                'is_obe'     => $is_obe ? 1 : 0,
+                'penguji'    => $penguji,
+            ];
+        }
+
         if ($ujian && in_array($ujian->status, ['disetujui', 'dijadwalkan'])) {
             $today = date('Y-m-d');
             $tgl_ujian = $ujian->tanggal_ujian;
-
-            // Build schedule extra_data for the info card
-            $extra_data = null;
-            if ($ujian_detail) {
-                $penguji = [];
-                if ($ujian_detail->id_penguji1 && !empty(trim($ujian_detail->nama_penguji1)))
-                    $penguji[] = ['nama' => trim($ujian_detail->nama_penguji1), 'peran' => 'Ketua Penguji'];
-                if ($ujian_detail->id_penguji2 && !empty(trim($ujian_detail->nama_penguji2)))
-                    $penguji[] = ['nama' => trim($ujian_detail->nama_penguji2), 'peran' => 'Penguji 2'];
-                if ($ujian_detail->id_penguji3 && !empty(trim($ujian_detail->nama_penguji3)))
-                    $penguji[] = ['nama' => trim($ujian_detail->nama_penguji3), 'peran' => 'Penguji 3'];
-
-                $extra_data = [
-                    'tgl_ujian'  => $tgl_ujian,
-                    'jam_mulai'  => $ujian_detail->jam_mulai,
-                    'jam_selesai'=> $ujian_detail->jam_selesai,
-                    'ruang'      => $ujian_detail->ruang,
-                    'penguji'    => $penguji,
-                ];
-            }
 
             if ($today == $tgl_ujian) {
                 return ['label' => '🎙️ Sidang Sedang Berlangsung!', 'url' => '#', 'warna' => 'success', 'disabled' => true, 'extra_data' => $extra_data];
@@ -894,20 +899,20 @@ class Mskripsi extends Model
 
         if ($ujian && $ujian->status == 'dinilai') {
             if ($ujian_detail && $ujian_detail->keputusan == 'lulus_dengan_perbaikan') {
-                return ['label' => 'Lengkapi Realisasi Luaran & Revisi Ujian', 'url' => 'mahasiswa/skripsi/ujian', 'warna' => 'warning', 'disabled' => false];
+                return ['label' => 'Lengkapi Realisasi Luaran & Revisi Ujian', 'url' => 'mahasiswa/skripsi/ujian', 'warna' => 'warning', 'disabled' => false, 'extra_data' => $extra_data];
             }
-            return ['label' => 'Menunggu Input Nilai dari Dosen Lain...', 'url' => '#', 'warna' => 'secondary', 'disabled' => true];
+            return ['label' => 'Menunggu Input Nilai dari Dosen Lain...', 'url' => '#', 'warna' => 'secondary', 'disabled' => true, 'extra_data' => $extra_data];
         }
 
         if ($ujian && $ujian->status == 'menunggu_penetapan') {
             if ($ujian_detail && $ujian_detail->keputusan == 'lulus_dengan_perbaikan') {
-                return ['label' => 'Lengkapi Realisasi Luaran & Revisi Ujian', 'url' => 'mahasiswa/skripsi/ujian', 'warna' => 'warning', 'disabled' => false];
+                return ['label' => 'Lengkapi Realisasi Luaran & Revisi Ujian', 'url' => 'mahasiswa/skripsi/ujian', 'warna' => 'warning', 'disabled' => false, 'extra_data' => $extra_data];
             }
-            return ['label' => 'Menunggu Penetapan Nilai Resmi', 'url' => '#', 'warna' => 'info', 'disabled' => true];
+            return ['label' => 'Menunggu Penetapan Nilai Resmi', 'url' => '#', 'warna' => 'info', 'disabled' => true, 'extra_data' => $extra_data];
         }
 
         if ($ujian && in_array($ujian->status, ['ditetapkan', 'lulus'])) {
-            return ['label' => 'Selamat! Menuju Yudisium 🎓', 'url' => '#', 'warna' => 'success', 'disabled' => true];
+            return ['label' => 'Selamat! Menuju Yudisium 🎓', 'url' => '#', 'warna' => 'success', 'disabled' => true, 'extra_data' => $extra_data];
         }
 
         if ($ujian && $ujian->status == 'tidak_lulus') {

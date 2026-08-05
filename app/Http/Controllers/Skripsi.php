@@ -602,17 +602,23 @@ class Skripsi extends Controller
         $notice_message = null;
 
         if ($ujian) {
+            $today = date('Y-m-d');
+            $tgl_ujian = $ujian->tanggal_ujian;
+            $is_future_exam = $tgl_ujian && $tgl_ujian > $today;
+
+            $ba = DB::table('akd_skripsi_berita_acara')->where('id_skripsi_ujian', $ujian->id)->first();
+            $all_signed = $ba && !empty($ba->setuju_penguji1) && !empty($ba->setuju_penguji2) && !empty($ba->setuju_penguji3);
+            $ba_finalized = $ba && ($ba->status == 'selesai' || $all_signed);
+
             if (in_array($ujian->status, ['ditetapkan', 'lulus', 'tidak_lulus'])) {
                 $ujian_locked = true;
                 $notice_message = 'Ujian Anda telah selesai dilaksanakan & nilai telah difinalisasi.';
             } else if ($ujian->status == 'diajukan') {
                 $notice_message = 'Pendaftaran Ujian Terkirim – Menunggu Penjadwalan Kaprodi.';
-            } else if (in_array($ujian->status, ['disetujui', 'dijadwalkan'])) {
-                $notice_message = 'Pendaftaran Ujian Telah Disetujui & Dijadwalkan oleh Kaprodi.';
-            } else if (in_array($ujian->status, ['dinilai', 'menunggu_penetapan'])) {
-                // Not locked, but show a notice about grading/revision!
-                $ba = DB::table('akd_skripsi_berita_acara')->where('id_skripsi_ujian', $ujian->id)->first();
-                if ($ba && $ba->keputusan == 'lulus_dengan_perbaikan') {
+            } else if (in_array($ujian->status, ['disetujui', 'dijadwalkan']) || $is_future_exam || !$ba_finalized) {
+                $notice_message = 'Pendaftaran Ujian Telah Disetujui & Dijadwalkan oleh Kaprodi' . ($tgl_ujian ? ' (Tanggal Ujian: ' . date('d-m-Y', strtotime($tgl_ujian)) . ')' : '') . '.';
+            } else if (in_array($ujian->status, ['dinilai', 'menunggu_penetapan']) && $ba_finalized) {
+                if ($ba->keputusan == 'lulus_dengan_perbaikan') {
                     $notice_message = 'Keputusan: Lulus dengan Perbaikan (Revisi). Silakan perbarui judul/link luaran & naskah jika diperlukan sebelum masa revisi berakhir (' . ($ba->batas_revisi ? date('d-m-Y', strtotime($ba->batas_revisi)) : '-') . ').';
                 } else {
                     $notice_message = 'Ujian selesai. Silakan sesuaikan/lengkapi link luaran jurnal/berkas pendukung jika diperlukan.';

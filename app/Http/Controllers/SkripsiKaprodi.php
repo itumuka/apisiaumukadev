@@ -1443,9 +1443,10 @@ class SkripsiKaprodi extends Controller
                     // 2. Sync ke akd_detail_krs (KRS semesteran)
                     $detail_ids = DB::table('akd_detail_krs as dk')
                         ->join('akd_krs as k', 'dk.id_krs', '=', 'k.id_krs')
+                        ->join('akd_heregistrasi as h', 'k.id_heregistrasi', '=', 'h.id_heregistrasi')
                         ->join('akd_kelas_kuliah as kk', 'dk.id_kelas', '=', 'kk.id_kelas')
                         ->join('akd_penawaran_matakuliah as pm', 'kk.id_tawar', '=', 'pm.id_tawar')
-                        ->where('k.nim', $ujian->nim)
+                        ->where('h.nim', $ujian->nim)
                         ->where('pm.id_matakuliah', $id_matakuliah)
                         ->pluck('dk.id_detail_krs');
 

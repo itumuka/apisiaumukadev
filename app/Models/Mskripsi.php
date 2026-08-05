@@ -707,9 +707,14 @@ class Mskripsi extends Model
                 ->leftJoin('akd_skripsi_berita_acara as ba', 'u.id', '=', 'ba.id_skripsi_ujian')
                 ->select(
                     'u.*',
+                    'ba.status as ba_status',
                     'ba.keputusan',
                     'ba.catatan as catatan_revisi',
                     'ba.batas_revisi',
+                    'ba.setuju_penguji1',
+                    'ba.setuju_penguji2',
+                    'ba.setuju_penguji3',
+                    DB::raw("CASE WHEN ba.setuju_penguji1 IS NOT NULL AND ba.setuju_penguji2 IS NOT NULL AND ba.setuju_penguji3 IS NOT NULL THEN 1 ELSE 0 END as all_signed"),
                     DB::raw("CONCAT_WS(' ', p1.gelar_depan, p1.nama, p1.gelar_belakang) as nama_penguji1"),
                     DB::raw("CONCAT_WS(' ', p2.gelar_depan, p2.nama, p2.gelar_belakang) as nama_penguji2"),
                     DB::raw("CONCAT_WS(' ', p3.gelar_depan, p3.nama, p3.gelar_belakang) as nama_penguji3")

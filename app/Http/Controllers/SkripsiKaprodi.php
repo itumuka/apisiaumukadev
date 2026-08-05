@@ -23,6 +23,13 @@ class SkripsiKaprodi extends Controller
             ->leftJoin('akd_skripsi as s', 'm.nim', '=', 's.nim')
             ->leftJoin('simpeg_pegawai as p1', 's.id_dosen_pembimbing1', '=', 'p1.id')
             ->leftJoin('simpeg_pegawai as p2', 's.id_dosen_pembimbing2', '=', 'p2.id')
+            ->leftJoin('akd_skripsi_ujian as u', function($join) {
+                $join->on('s.id', '=', 'u.id_skripsi')
+                     ->whereRaw('u.id = (SELECT MAX(u2.id) FROM akd_skripsi_ujian u2 WHERE u2.id_skripsi = s.id)');
+            })
+            ->leftJoin('simpeg_pegawai as pg1', 'u.id_penguji1', '=', 'pg1.id')
+            ->leftJoin('simpeg_pegawai as pg2', 'u.id_penguji2', '=', 'pg2.id')
+            ->leftJoin('simpeg_pegawai as pg3', 'u.id_penguji3', '=', 'pg3.id')
             ->select(
                 'm.nim',
                 'm.nama_mahasiswa as nama_mhs',
@@ -34,7 +41,13 @@ class SkripsiKaprodi extends Controller
                 DB::raw("CONCAT_WS(' ', p1.gelar_depan, p1.nama, p1.gelar_belakang) as nama_pembimbing1"),
                 DB::raw("CONCAT_WS(' ', p2.gelar_depan, p2.nama, p2.gelar_belakang) as nama_pembimbing2"),
                 's.id_dosen_pembimbing1',
-                's.id_dosen_pembimbing2'
+                's.id_dosen_pembimbing2',
+                'u.id_penguji1',
+                'u.id_penguji2',
+                'u.id_penguji3',
+                DB::raw("CONCAT_WS(' ', pg1.gelar_depan, pg1.nama, pg1.gelar_belakang) as nama_penguji1"),
+                DB::raw("CONCAT_WS(' ', pg2.gelar_depan, pg2.nama, pg2.gelar_belakang) as nama_penguji2"),
+                DB::raw("CONCAT_WS(' ', pg3.gelar_depan, pg3.nama, pg3.gelar_belakang) as nama_penguji3")
             )
             ->where('m.kode_program_studi', $kode_prodi)
             ->whereNotNull('s.nim')

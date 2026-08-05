@@ -1399,27 +1399,27 @@ class SkripsiKaprodi extends Controller
                     'updated_at' => now(),
                 ]);
 
-            // Sync ke akd_transkrip
+            // Sync ke akd_transkrip & akd_detail_krs
             $mhs = DB::table('akd_mahasiswa')->where('nim', $ujian->nim)->first();
             if ($mhs) {
                 $mk = DB::table('akd_matakuliah')
                     ->where('kode_program_studi', $mhs->kode_program_studi)
-                    ->where('tahun_kurikulum', $mhs->tahun_kurikulum)
                     ->where(function($q) {
                         $q->where('nama_matakuliah', 'like', '%skripsi%')
                           ->orWhere('nama_matakuliah', 'like', '%tugas akhir%');
                     })
                     ->where('nama_matakuliah', 'not like', '%proposal%')
+                    ->orderByRaw("CASE WHEN tahun_kurikulum = '{$mhs->tahun_kurikulum}' THEN 1 ELSE 2 END")
                     ->first();
 
                 if ($mk) {
                     $id_matakuliah = $mk->id_matakuliah;
                     $tahun_kurikulum = $mk->tahun_kurikulum;
 
+                    // 1. Sync ke akd_transkrip
                     $cek_nilai = DB::table('akd_transkrip')
                         ->where('nim', $ujian->nim)
                         ->where('id_matakuliah', $id_matakuliah)
-                        ->where('tahun_kurikulum', $tahun_kurikulum)
                         ->first();
 
                     if ($cek_nilai) {
@@ -1438,6 +1438,25 @@ class SkripsiKaprodi extends Controller
                             'created_at' => now(),
                             'updated_at' => now()
                         ]);
+                    }
+
+                    // 2. Sync ke akd_detail_krs (KRS semesteran)
+                    $detail_ids = DB::table('akd_detail_krs as dk')
+                        ->join('akd_krs as k', 'dk.id_krs', '=', 'k.id_krs')
+                        ->join('akd_kelas_kuliah as kk', 'dk.id_kelas', '=', 'kk.id_kelas')
+                        ->join('akd_penawaran_matakuliah as pm', 'kk.id_tawar', '=', 'pm.id_tawar')
+                        ->where('k.nim', $ujian->nim)
+                        ->where('pm.id_matakuliah', $id_matakuliah)
+                        ->pluck('dk.id_detail_krs');
+
+                    if ($detail_ids->isNotEmpty()) {
+                        DB::table('akd_detail_krs')
+                            ->whereIn('id_detail_krs', $detail_ids)
+                            ->update([
+                                'nilai_akhir_angka' => $ba->nilai_angka,
+                                'nilai_akhir_huruf' => $ba->nilai_huruf,
+                                'dtime_update'      => now()
+                            ]);
                     }
                 }
             }

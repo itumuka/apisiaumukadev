@@ -3586,7 +3586,10 @@ GROUP BY akd_matakuliah.id_matakuliah ORDER BY akd_transkrip.id_matakuliah ASC
 
     public function gettranskipnilai_cetak(Request $request)
     {
-        $gettranskipnilai_cetak = DB::select("SELECT akd_mahasiswa.*,adm_camaba.*,akd_program_studi.*,akd_fakultas.*,akd_kelengkapan_transkrip.*,CONCAT(gelar_depan,' ',simpeg_pegawai.nama,', ',gelar_belakang) AS namakaprodi,(SELECT CONCAT(gelar_depan,' ',nama,' ',gelar_belakang) FROM simpeg_pegawai WHERE id=akd_fakultas.pimpinan) AS namadekan,(SELECT COALESCE(nip, nidn, '-') FROM simpeg_pegawai WHERE id=akd_fakultas.pimpinan) AS nipdekan,
+        $gettranskipnilai_cetak = DB::select("SELECT akd_mahasiswa.*,adm_camaba.*,akd_program_studi.*,akd_fakultas.*,akd_kelengkapan_transkrip.*,
+        CONCAT(COALESCE(simpeg_pegawai.gelar_depan,''), ' ', simpeg_pegawai.nama, IF(simpeg_pegawai.gelar_belakang IS NOT NULL AND simpeg_pegawai.gelar_belakang != '', CONCAT(', ', simpeg_pegawai.gelar_belakang), '')) AS namakaprodi,
+        (SELECT CONCAT(COALESCE(gelar_depan,''), ' ', nama, IF(gelar_belakang IS NOT NULL AND gelar_belakang != '', CONCAT(', ', gelar_belakang), '')) FROM simpeg_pegawai WHERE id=akd_fakultas.pimpinan) AS namadekan,
+        (SELECT COALESCE(nip, nidn, '-') FROM simpeg_pegawai WHERE id=akd_fakultas.pimpinan) AS nipdekan,
         (SELECT tipe FROM akd_transkrip_ajuan WHERE nim = akd_mahasiswa.nim AND status = 'approved' ORDER BY id DESC LIMIT 1) AS tipe_ajuan,
         DATE_FORMAT(
             COALESCE(
@@ -3603,7 +3606,7 @@ GROUP BY akd_matakuliah.id_matakuliah ORDER BY akd_transkrip.id_matakuliah ASC
         ) AS tgllulus,
         DATE_FORMAT(tanggal_yudicium, '%d-%m-%Y') AS tglyud,DATE_FORMAT(tgl_registrasi, '%d-%m-%Y') AS tglmasuk,DATE_FORMAT(akd_mahasiswa.tanggal_lahir, '%d-%m-%Y') AS tgllahir FROM akd_mahasiswa JOIN adm_camaba ON 
         akd_mahasiswa.no_pendaftaran=adm_camaba.no_pendaftaran JOIN akd_program_studi ON akd_mahasiswa.kode_program_studi=akd_program_studi.kode_program_studi
-        JOIN akd_fakultas ON akd_mahasiswa.kode_fakultas=akd_fakultas.kode_fakultas  LEFT JOIN  akd_kelengkapan_transkrip ON akd_kelengkapan_transkrip.nim=akd_mahasiswa.nim LEFT JOIN simpeg_pegawai ON akd_program_studi.pimpinan_prodi=simpeg_pegawai.id WHERE akd_mahasiswa.nim='" . $request->nim . "' ");
+        JOIN akd_fakultas ON akd_program_studi.kode_fakultas=akd_fakultas.kode_fakultas LEFT JOIN akd_kelengkapan_transkrip ON akd_kelengkapan_transkrip.nim=akd_mahasiswa.nim LEFT JOIN simpeg_pegawai ON akd_program_studi.pimpinan_prodi=simpeg_pegawai.id WHERE akd_mahasiswa.nim='" . $request->nim . "' ");
         return $gettranskipnilai_cetak;
     }
     public function tampilno_transkip()

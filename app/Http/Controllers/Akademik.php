@@ -2921,14 +2921,26 @@ class Akademik extends Controller
     public function get_all_transkrip_ajuan(Request $request)
     {
         $status = $request->status;
+        $username = $request->header('username') ?: $request->query('username');
+
         $query = DB::table('akd_transkrip_ajuan')
             ->join('akd_mahasiswa', 'akd_transkrip_ajuan.nim', '=', 'akd_mahasiswa.nim')
             ->join('akd_program_studi', 'akd_mahasiswa.kode_program_studi', '=', 'akd_program_studi.kode_program_studi')
             ->select(
                 'akd_transkrip_ajuan.*',
                 'akd_mahasiswa.nama_mahasiswa',
-                'akd_program_studi.nama_program_studi'
+                'akd_program_studi.nama_program_studi',
+                'akd_program_studi.kode_fakultas'
             );
+
+        if ($username) {
+            $user = DB::table('user')->where('username', $username)->first();
+            // Administrator (group 1) & Akademik (group 6) see all data
+            // Dekanat (group 4) or users with specific faculty -> filter by faculty
+            if ($user && !in_array((int)$user->kode_group, [1, 6]) && !empty($user->kode_fakultas)) {
+                $query->where('akd_program_studi.kode_fakultas', $user->kode_fakultas);
+            }
+        }
 
         if ($status) {
             $query->where('akd_transkrip_ajuan.status', $status);

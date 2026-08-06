@@ -3563,7 +3563,7 @@ TIME_FORMAT(jam_mulai, '%H:%i') AS jam_mulai, TIME_FORMAT(jam_selesai, '%H:%i') 
         $prodi = $cekkur->kode_program_studi;
 
 
-        $transkipnilai1 = DB::select("SELECT a.*,tb.biji as nilai_huruf_akhir,tb.mutu FROM akd_matakuliah a LEFT JOIN (SELECT MIN(akd_transkrip.nilai) AS biji,akd_transkrip.*,MAX(akd_predikat_nilai_huruf.mutu) AS mutu 
+        $transkipnilai1 = DB::select("SELECT a.*,tb.biji as nilai_huruf_akhir,tb.mutu FROM akd_matakuliah a JOIN (SELECT MIN(akd_transkrip.nilai) AS biji,akd_transkrip.*,MAX(akd_predikat_nilai_huruf.mutu) AS mutu 
 FROM akd_transkrip
 JOIN akd_matakuliah ON akd_transkrip.id_matakuliah=akd_matakuliah.id_matakuliah
 JOIN akd_predikat_nilai_huruf ON akd_transkrip.nilai=akd_predikat_nilai_huruf.nilai_huruf_akhir 

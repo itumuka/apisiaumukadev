@@ -732,7 +732,10 @@ class Makademik extends Model
 
     public function getkelasmk_cetak(Request $request)
     {
-        $getkelasmk_cetak = collect(DB::select("SELECT id_kelas, kode_matakuliah, nama_matakuliah, akd_penawaran_matakuliah.sks_matakuliah, nama_kelas,sp.nama AS dekan, hari, nama_fakultas, i.nama AS namakaprodi,
+        $getkelasmk_cetak = collect(DB::select("SELECT id_kelas, kode_matakuliah, nama_matakuliah, akd_penawaran_matakuliah.sks_matakuliah, nama_kelas,
+CONCAT(COALESCE(NULLIF(TRIM(sp.gelar_depan), ''), ''), IF(sp.gelar_depan IS NOT NULL AND TRIM(sp.gelar_depan) != '', ' ', ''), sp.nama, IF(sp.gelar_belakang IS NOT NULL AND TRIM(sp.gelar_belakang) != '', CONCAT(', ', TRIM(sp.gelar_belakang)), '')) AS dekan,
+hari, nama_fakultas,
+CONCAT(COALESCE(NULLIF(TRIM(i.gelar_depan), ''), ''), IF(i.gelar_depan IS NOT NULL AND TRIM(i.gelar_depan) != '', ' ', ''), i.nama, IF(i.gelar_belakang IS NOT NULL AND TRIM(i.gelar_belakang) != '', CONCAT(', ', TRIM(i.gelar_belakang)), '')) AS namakaprodi,
 CONCAT_WS(' ', e.gelar_depan, e.nama,e.gelar_belakang) AS nama_dosen, CONCAT_WS(' ', h.gelar_depan, h.nama,h.gelar_belakang) AS nama_dosen2,
 TIME_FORMAT(jam_mulai, '%H:%i') AS jam_mulai, TIME_FORMAT(jam_selesai, '%H:%i') AS jam_selesai, kode_ruang, akd_program_studi.nama_program_studi, akd_program_studi.file_ttd
             FROM akd_kelas_kuliah

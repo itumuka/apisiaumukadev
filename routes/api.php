@@ -488,6 +488,11 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::post("/kaprodi/skripsi/tetapkan-nilai", "SkripsiKaprodi@tetapkan_nilai")->name('skripsi_kaprodi_tetapkan_nilai');
     Route::post("/akademik/skripsi/update-berita-acara", "SkripsiDosen@update_berita_acara_by_admin")->name('skripsi_admin_update_berita_acara');
 
+    // Modul Skripsi Dekanat APIs
+    Route::get("/skripsi/dekanat/rekap-penilaian", "SkripsiDekanat@rekap_penilaian")->name('skripsi_dekanat_rekap_penilaian');
+    Route::get("/skripsi/dekanat/detail-penilaian/{id_ujian}", "SkripsiDekanat@detail_penilaian")->name('skripsi_dekanat_detail_penilaian');
+    Route::get("/skripsi/dekanat/prodi-list", "SkripsiDekanat@get_prodi_by_fakultas")->name('skripsi_dekanat_prodi_list');
+
     // API Cetak Data & Approval Bimbingan
     Route::get("/akademik/skripsi/bimbingan/cetak-data", "Skripsi@get_cetak_bimbingan")->name('skripsi_cetak_bimbingan_data');
 

@@ -1056,7 +1056,9 @@ class Mskripsi extends Model
                 's.id_dosen_pembimbing2',
                 DB::raw("(SELECT COUNT(id) FROM akd_skripsi_bimbingan b WHERE b.id_skripsi = s.id AND b.status IN ('disetujui', 'disetujui_kaprodi', 'disetujui_dekan', 'revisi')) as total_bimbingan_acc"),
                 DB::raw("(SELECT COUNT(id) FROM akd_skripsi_bimbingan b WHERE b.id_skripsi = s.id) as total_bimbingan_submitted"),
-                DB::raw("(SELECT COUNT(id) FROM akd_skripsi_bimbingan b WHERE b.id_skripsi = s.id AND b.status = 'pending') as total_bimbingan_pending")
+                DB::raw("(SELECT COUNT(id) FROM akd_skripsi_bimbingan b WHERE b.id_skripsi = s.id AND b.status = 'pending') as total_bimbingan_pending"),
+                DB::raw("(SELECT status FROM akd_skripsi_ujian u WHERE u.id_skripsi = s.id ORDER BY u.id DESC LIMIT 1) as status_ujian"),
+                DB::raw("(SELECT status FROM akd_skripsi_proposal pr WHERE pr.id_skripsi = s.id ORDER BY pr.id DESC LIMIT 1) as status_sempro")
             )
             ->where(function ($query) use ($id_dosen) {
                 $query->where('s.id_dosen_pembimbing1', $id_dosen)

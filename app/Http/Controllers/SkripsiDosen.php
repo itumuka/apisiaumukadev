@@ -713,6 +713,16 @@ class SkripsiDosen extends Controller
             ->where('id_skripsi_ujian', $id_skripsi_ujian)->first();
         if (!$ba) return response()->json(['error' => 'Berita Acara belum dibuat. Pastikan semua penguji sudah input nilai.'], 404);
 
+        // Wajib pastikan dosen penguji ini sudah menginputkan nilai indikator terlebih dahulu sebelum TTD Digital
+        $hasScores = DB::table('akd_skripsi_nilai_indikator')
+            ->where('id_skripsi_ujian', $id_skripsi_ujian)
+            ->where('id_dosen', $id_dosen)
+            ->exists();
+
+        if (!$hasScores) {
+            return response()->json(['error' => 'Anda belum menginputkan nilai rubrik indikator ujian. Silakan input nilai terlebih dahulu sebelum menandatangani Berita Acara.'], 400);
+        }
+
         // Tentukan kolom setuju & valid_id berdasarkan peran dosen
         $updateData = ['updated_at' => now()];
         if ($id_dosen == $ujian->id_penguji1 && !$ba->setuju_penguji1) {

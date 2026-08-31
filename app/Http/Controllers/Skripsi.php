@@ -168,9 +168,9 @@ class Skripsi extends Controller
 
             if (!$kalender_skripsi) {
                 $kalender_skripsi = DB::table('akd_kalender_akademik')
-                    ->where('tahun', $cekta->tahun)
-                    ->where('semester', $cekta->semester)
-                    ->orderBy('tanggal_akhir', 'desc')
+                    ->where('kode_kegiatan_akademik', '37')
+                    ->orWhere('nama_kegiatan', 'like', '%Yudisium Skripsi%')
+                    ->orderBy('id', 'desc')
                     ->first();
             }
 

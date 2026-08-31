@@ -65,34 +65,44 @@ class SkripsiKaprodi extends Controller
         $ta_sempro_skema = $prodiConfig ? $prodiConfig->ta_sempro_skema : 'skripsi';
 
         // Cek Batas Kalender Akademik untuk Skripsi/Yudisium
-        $cekta = DB::table('akd_mreg')->where('trash', '1')->first();
+        $tahun = $request->tahun;
+        $semester = $request->semester;
+        if (!$tahun || !$semester) {
+            $cekta = DB::table('akd_mreg')->where('trash', '1')->first();
+            if ($cekta) {
+                $tahun = $cekta->tahun;
+                $semester = $cekta->semester;
+            }
+        }
+
         $tgl_batas_kalender = null;
-        if ($cekta) {
+        $kalender_skripsi = DB::table('akd_kalender_akademik')
+            ->where(function($q) use ($tahun, $semester) {
+                if ($tahun && $semester) {
+                    $q->where('tahun', $tahun)->where('semester', $semester);
+                }
+            })
+            ->where(function($q) {
+                $q->where('kode_kegiatan_akademik', '37')
+                  ->orWhere('nama_kegiatan', 'like', '%Yudisium Skripsi%')
+                  ->orWhere('nama_kegiatan', 'like', '%Yudisium%')
+                  ->orWhere('nama_kegiatan', 'like', '%Skripsi%')
+                  ->orWhere('nama_kegiatan', 'like', '%Tugas Akhir%');
+            })
+            ->orderBy(DB::raw("CASE WHEN kode_kegiatan_akademik = '37' THEN 1 ELSE 2 END"), 'asc')
+            ->orderBy('tanggal_akhir', 'desc')
+            ->first();
+
+        if (!$kalender_skripsi) {
             $kalender_skripsi = DB::table('akd_kalender_akademik')
-                ->where('tahun', $cekta->tahun)
-                ->where('semester', $cekta->semester)
-                ->where(function($q) {
-                    $q->where('kode_kegiatan_akademik', '37')
-                      ->orWhere('nama_kegiatan', 'like', '%Yudisium Skripsi%')
-                      ->orWhere('nama_kegiatan', 'like', '%Yudisium%')
-                      ->orWhere('nama_kegiatan', 'like', '%Skripsi%')
-                      ->orWhere('nama_kegiatan', 'like', '%Tugas Akhir%');
-                })
-                ->orderBy(DB::raw("CASE WHEN kode_kegiatan_akademik = '37' THEN 1 ELSE 2 END"), 'asc')
-                ->orderBy('tanggal_akhir', 'desc')
+                ->where('kode_kegiatan_akademik', '37')
+                ->orWhere('nama_kegiatan', 'like', '%Yudisium Skripsi%')
+                ->orderBy('id', 'desc')
                 ->first();
+        }
 
-            if (!$kalender_skripsi) {
-                $kalender_skripsi = DB::table('akd_kalender_akademik')
-                    ->where('tahun', $cekta->tahun)
-                    ->where('semester', $cekta->semester)
-                    ->orderBy('tanggal_akhir', 'desc')
-                    ->first();
-            }
-
-            if ($kalender_skripsi && !empty($kalender_skripsi->tanggal_akhir)) {
-                $tgl_batas_kalender = $kalender_skripsi->tanggal_akhir;
-            }
+        if ($kalender_skripsi && !empty($kalender_skripsi->tanggal_akhir)) {
+            $tgl_batas_kalender = $kalender_skripsi->tanggal_akhir;
         }
 
         $today = date('Y-m-d');
@@ -421,9 +431,27 @@ class SkripsiKaprodi extends Controller
             return response()->json(['error' => $validation->errors()->all()], 422);
         }
 
-        DB::table('akd_skripsi_ujian')
+        $existing = DB::table('akd_skripsi_ujian')
             ->where('id_skripsi', $request->id_skripsi)
-            ->update([
+            ->orderBy('id', 'desc')
+            ->first();
+
+        if ($existing) {
+            DB::table('akd_skripsi_ujian')
+                ->where('id', $existing->id)
+                ->update([
+                    'tanggal_ujian' => $request->tgl_ujian,
+                    'jam_mulai' => $request->jam_ujian,
+                    'ruang' => $request->ruang_ujian,
+                    'id_penguji1' => $request->id_penguji1,
+                    'id_penguji2' => $request->id_penguji2,
+                    'id_penguji3' => $request->id_penguji3,
+                    'status' => 'disetujui',
+                    'updated_at' => now()
+                ]);
+        } else {
+            DB::table('akd_skripsi_ujian')->insert([
+                'id_skripsi' => $request->id_skripsi,
                 'tanggal_ujian' => $request->tgl_ujian,
                 'jam_mulai' => $request->jam_ujian,
                 'ruang' => $request->ruang_ujian,
@@ -431,8 +459,10 @@ class SkripsiKaprodi extends Controller
                 'id_penguji2' => $request->id_penguji2,
                 'id_penguji3' => $request->id_penguji3,
                 'status' => 'disetujui',
+                'created_at' => now(),
                 'updated_at' => now()
             ]);
+        }
 
         // After Kaprodi plots the exam schedule, set the main skripsi fase_aktif to 'ujian'
         DB::table('akd_skripsi')

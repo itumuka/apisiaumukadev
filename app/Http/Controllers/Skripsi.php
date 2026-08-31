@@ -157,11 +157,13 @@ class Skripsi extends Controller
                 ->where('semester', $cekta->semester)
                 ->where('trash', '0')
                 ->where(function($q) {
-                    $q->where('nama_kegiatan', 'like', '%Skripsi%')
+                    $q->where('kode_kegiatan_akademik', '37')
+                      ->orWhere('nama_kegiatan', 'like', '%Yudisium Skripsi%')
                       ->orWhere('nama_kegiatan', 'like', '%Yudisium%')
-                      ->orWhere('nama_kegiatan', 'like', '%Tugas Akhir%')
-                      ->orWhere('kode_kegiatan_akademik', '25');
+                      ->orWhere('nama_kegiatan', 'like', '%Skripsi%')
+                      ->orWhere('nama_kegiatan', 'like', '%Tugas Akhir%');
                 })
+                ->orderBy(DB::raw("CASE WHEN kode_kegiatan_akademik = '37' THEN 1 ELSE 2 END"), 'asc')
                 ->orderBy('tanggal_akhir', 'desc')
                 ->first();
 

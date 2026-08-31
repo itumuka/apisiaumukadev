@@ -731,7 +731,9 @@ class Mskripsi extends Model
             $kalender_skripsi = DB::table('akd_kalender_akademik')
                 ->where('tahun', $cekta->tahun)
                 ->where('semester', $cekta->semester)
-                ->where('trash', '0')
+                ->where(function($tq) {
+                    $tq->whereNull('trash')->orWhere('trash', '!=', '1');
+                })
                 ->where(function($q) {
                     $q->where('kode_kegiatan_akademik', '37')
                       ->orWhere('nama_kegiatan', 'like', '%Yudisium Skripsi%')
@@ -747,7 +749,9 @@ class Mskripsi extends Model
                 $kalender_skripsi = DB::table('akd_kalender_akademik')
                     ->where('tahun', $cekta->tahun)
                     ->where('semester', $cekta->semester)
-                    ->where('trash', '0')
+                    ->where(function($tq) {
+                        $tq->whereNull('trash')->orWhere('trash', '!=', '1');
+                    })
                     ->orderBy('tanggal_akhir', 'desc')
                     ->first();
             }

@@ -436,22 +436,13 @@ class SkripsiKaprodi extends Controller
             ->orderBy('id', 'desc')
             ->first();
 
-        if ($existing) {
-            DB::table('akd_skripsi_ujian')
-                ->where('id', $existing->id)
-                ->update([
-                    'tanggal_ujian' => $request->tgl_ujian,
-                    'jam_mulai' => $request->jam_ujian,
-                    'ruang' => $request->ruang_ujian,
-                    'id_penguji1' => $request->id_penguji1,
-                    'id_penguji2' => $request->id_penguji2,
-                    'id_penguji3' => $request->id_penguji3,
-                    'status' => 'disetujui',
-                    'updated_at' => now()
-                ]);
-        } else {
-            DB::table('akd_skripsi_ujian')->insert([
-                'id_skripsi' => $request->id_skripsi,
+        if (!$existing) {
+            return response()->json(['error' => 'Mahasiswa belum mengajukan pendaftaran ujian di sistem. Plotting jadwal hanya dapat dilakukan setelah mahasiswa mengajukan ujian.'], 422);
+        }
+
+        DB::table('akd_skripsi_ujian')
+            ->where('id', $existing->id)
+            ->update([
                 'tanggal_ujian' => $request->tgl_ujian,
                 'jam_mulai' => $request->jam_ujian,
                 'ruang' => $request->ruang_ujian,
@@ -459,10 +450,8 @@ class SkripsiKaprodi extends Controller
                 'id_penguji2' => $request->id_penguji2,
                 'id_penguji3' => $request->id_penguji3,
                 'status' => 'disetujui',
-                'created_at' => now(),
                 'updated_at' => now()
             ]);
-        }
 
         // After Kaprodi plots the exam schedule, set the main skripsi fase_aktif to 'ujian'
         DB::table('akd_skripsi')

@@ -753,13 +753,17 @@ class Mskripsi extends Model
             if ($kalender_skripsi && !empty($kalender_skripsi->tanggal_akhir)) {
                 $tgl_batas_kalender = $kalender_skripsi->tanggal_akhir;
                 $today = date('Y-m-d');
-                if ($today > $tgl_batas_kalender) {
-                    // Fairness Rule Check
-                    if ($skripsi && $skripsi->status === 'lulus') {
-                        $is_expired = false;
-                    } else if ($ujian && in_array($ujian->status, ['ditetapkan', 'lulus'])) {
-                        $is_expired = false;
-                    } else if ($ujian && !empty($ujian->tanggal_ujian) && $ujian->tanggal_ujian <= $tgl_batas_kalender) {
+                
+                // Fairness Rule Check
+                if ($skripsi && $skripsi->status === 'lulus') {
+                    $is_expired = false;
+                } else if ($ujian && in_array($ujian->status, ['ditetapkan', 'lulus'])) {
+                    $is_expired = false;
+                } else if ($ujian && !empty($ujian->tanggal_ujian) && $ujian->tanggal_ujian > $tgl_batas_kalender) {
+                    // Jika ujian dijadwalkan setelah batas semester (misal 1 September)
+                    $is_expired = true;
+                } else if ($today > $tgl_batas_kalender) {
+                    if ($ujian && !empty($ujian->tanggal_ujian) && $ujian->tanggal_ujian <= $tgl_batas_kalender) {
                         $is_expired = false;
                     } else {
                         $is_expired = true;

@@ -177,13 +177,16 @@ class Skripsi extends Controller
             if ($kalender_skripsi && !empty($kalender_skripsi->tanggal_akhir)) {
                 $tgl_batas_kalender = $kalender_skripsi->tanggal_akhir;
                 $today = date('Y-m-d');
-                if ($today > $tgl_batas_kalender) {
-                    $ujian_mhs = $skripsi ? DB::table('akd_skripsi_ujian')->where('id_skripsi', $skripsi->id)->orderBy('id', 'desc')->first() : null;
-                    if ($skripsi && $skripsi->status === 'lulus') {
-                        $is_expired = false;
-                    } else if ($ujian_mhs && in_array($ujian_mhs->status, ['ditetapkan', 'lulus'])) {
-                        $is_expired = false;
-                    } else if ($ujian_mhs && !empty($ujian_mhs->tanggal_ujian) && $ujian_mhs->tanggal_ujian <= $tgl_batas_kalender) {
+                $ujian_mhs = $skripsi ? DB::table('akd_skripsi_ujian')->where('id_skripsi', $skripsi->id)->orderBy('id', 'desc')->first() : null;
+                
+                if ($skripsi && $skripsi->status === 'lulus') {
+                    $is_expired = false;
+                } else if ($ujian_mhs && in_array($ujian_mhs->status, ['ditetapkan', 'lulus'])) {
+                    $is_expired = false;
+                } else if ($ujian_mhs && !empty($ujian_mhs->tanggal_ujian) && $ujian_mhs->tanggal_ujian > $tgl_batas_kalender) {
+                    $is_expired = true;
+                } else if ($today > $tgl_batas_kalender) {
+                    if ($ujian_mhs && !empty($ujian_mhs->tanggal_ujian) && $ujian_mhs->tanggal_ujian <= $tgl_batas_kalender) {
                         $is_expired = false;
                     } else {
                         $is_expired = true;

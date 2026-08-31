@@ -117,13 +117,18 @@ class SkripsiKaprodi extends Controller
 
             // Hitung is_expired berbasis Fairness Rule
             $is_expired = false;
-            if ($tgl_batas_kalender && $today > $tgl_batas_kalender) {
+            if ($tgl_batas_kalender) {
                 if ($row->status === 'lulus' || (isset($row->status_ujian) && in_array($row->status_ujian, ['ditetapkan', 'lulus']))) {
                     $is_expired = false;
-                } else if (!empty($row->tanggal_ujian) && $row->tanggal_ujian <= $tgl_batas_kalender) {
-                    $is_expired = false;
-                } else {
+                } else if (!empty($row->tanggal_ujian) && $row->tanggal_ujian > $tgl_batas_kalender) {
+                    // Jika ujian dijadwalkan setelah batas semester (misal 1 September)
                     $is_expired = true;
+                } else if ($today > $tgl_batas_kalender) {
+                    if (!empty($row->tanggal_ujian) && $row->tanggal_ujian <= $tgl_batas_kalender) {
+                        $is_expired = false;
+                    } else {
+                        $is_expired = true;
+                    }
                 }
             }
             $row->is_expired = $is_expired;

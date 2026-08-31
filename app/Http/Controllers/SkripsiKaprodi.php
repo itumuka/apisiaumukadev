@@ -42,6 +42,9 @@ class SkripsiKaprodi extends Controller
                 DB::raw("CONCAT_WS(' ', p2.gelar_depan, p2.nama, p2.gelar_belakang) as nama_pembimbing2"),
                 's.id_dosen_pembimbing1',
                 's.id_dosen_pembimbing2',
+                'u.id as id_ujian',
+                'u.tanggal_ujian',
+                'u.status as status_ujian',
                 'u.id_penguji1',
                 'u.id_penguji2',
                 'u.id_penguji3',
@@ -61,6 +64,39 @@ class SkripsiKaprodi extends Controller
         $ta_ada_sempro = $prodiConfig ? $prodiConfig->ta_ada_sempro : 1;
         $ta_sempro_skema = $prodiConfig ? $prodiConfig->ta_sempro_skema : 'skripsi';
 
+        // Cek Batas Kalender Akademik untuk Skripsi/Yudisium
+        $cekta = DB::table('akd_mreg')->where('trash', '1')->first();
+        $tgl_batas_kalender = null;
+        if ($cekta) {
+            $kalender_skripsi = DB::table('akd_kalender_akademik')
+                ->where('tahun', $cekta->tahun)
+                ->where('semester', $cekta->semester)
+                ->where('trash', '0')
+                ->where(function($q) {
+                    $q->where('nama_kegiatan', 'like', '%Skripsi%')
+                      ->orWhere('nama_kegiatan', 'like', '%Yudisium%')
+                      ->orWhere('nama_kegiatan', 'like', '%Tugas Akhir%')
+                      ->orWhere('kode_kegiatan_akademik', '25');
+                })
+                ->orderBy('tanggal_akhir', 'desc')
+                ->first();
+
+            if (!$kalender_skripsi) {
+                $kalender_skripsi = DB::table('akd_kalender_akademik')
+                    ->where('tahun', $cekta->tahun)
+                    ->where('semester', $cekta->semester)
+                    ->where('trash', '0')
+                    ->orderBy('tanggal_akhir', 'desc')
+                    ->first();
+            }
+
+            if ($kalender_skripsi && !empty($kalender_skripsi->tanggal_akhir)) {
+                $tgl_batas_kalender = $kalender_skripsi->tanggal_akhir;
+            }
+        }
+
+        $today = date('Y-m-d');
+
         foreach ($data as $row) {
             if ($ta_ada_sempro == 0 || $ta_ada_sempro === '0' || $ta_ada_sempro === 'Tidak') {
                 $row->sempro_status = 'tidak_wajib';
@@ -78,6 +114,19 @@ class SkripsiKaprodi extends Controller
                     $row->sempro_status = 'belum_mengajukan';
                 }
             }
+
+            // Hitung is_expired berbasis Fairness Rule
+            $is_expired = false;
+            if ($tgl_batas_kalender && $today > $tgl_batas_kalender) {
+                if ($row->status === 'lulus' || (isset($row->status_ujian) && in_array($row->status_ujian, ['ditetapkan', 'lulus']))) {
+                    $is_expired = false;
+                } else if (!empty($row->tanggal_ujian) && $row->tanggal_ujian <= $tgl_batas_kalender) {
+                    $is_expired = false;
+                } else {
+                    $is_expired = true;
+                }
+            }
+            $row->is_expired = $is_expired;
         }
 
         return response()->json($data);

@@ -147,8 +147,55 @@ class Skripsi extends Controller
                 }
             }
         }
+        // Cek Batas Kalender Akademik untuk Ujian
+        $cekta = DB::table('akd_mreg')->where('trash', '1')->first();
+        $is_expired = false;
+        $tgl_batas_kalender = null;
+        if ($cekta) {
+            $kalender_skripsi = DB::table('akd_kalender_akademik')
+                ->where('tahun', $cekta->tahun)
+                ->where('semester', $cekta->semester)
+                ->where('trash', '0')
+                ->where(function($q) {
+                    $q->where('nama_kegiatan', 'like', '%Skripsi%')
+                      ->orWhere('nama_kegiatan', 'like', '%Yudisium%')
+                      ->orWhere('nama_kegiatan', 'like', '%Tugas Akhir%')
+                      ->orWhere('kode_kegiatan_akademik', '25');
+                })
+                ->orderBy('tanggal_akhir', 'desc')
+                ->first();
+
+            if (!$kalender_skripsi) {
+                $kalender_skripsi = DB::table('akd_kalender_akademik')
+                    ->where('tahun', $cekta->tahun)
+                    ->where('semester', $cekta->semester)
+                    ->where('trash', '0')
+                    ->orderBy('tanggal_akhir', 'desc')
+                    ->first();
+            }
+
+            if ($kalender_skripsi && !empty($kalender_skripsi->tanggal_akhir)) {
+                $tgl_batas_kalender = $kalender_skripsi->tanggal_akhir;
+                $today = date('Y-m-d');
+                if ($today > $tgl_batas_kalender) {
+                    $ujian_mhs = $skripsi ? DB::table('akd_skripsi_ujian')->where('id_skripsi', $skripsi->id)->orderBy('id', 'desc')->first() : null;
+                    if ($skripsi && $skripsi->status === 'lulus') {
+                        $is_expired = false;
+                    } else if ($ujian_mhs && in_array($ujian_mhs->status, ['ditetapkan', 'lulus'])) {
+                        $is_expired = false;
+                    } else if ($ujian_mhs && !empty($ujian_mhs->tanggal_ujian) && $ujian_mhs->tanggal_ujian <= $tgl_batas_kalender) {
+                        $is_expired = false;
+                    } else {
+                        $is_expired = true;
+                    }
+                }
+            }
+        }
+
         $hasil['ta_is_obe'] = $is_obe;
         $hasil['ujian_skripsi_lunas'] = $bayar_ujian;
+        $hasil['is_expired'] = $is_expired;
+        $hasil['tgl_batas_kalender'] = $tgl_batas_kalender;
 
         return response()->json([
             'status' => 'success',

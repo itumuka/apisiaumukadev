@@ -724,8 +724,52 @@ class Mskripsi extends Model
             $ujian = $ujian_detail; // alias
         }
 
+        // Cek Batas Kalender Akademik untuk Skripsi/Yudisium (Fairness Rule)
+        $is_expired = false;
+        $tgl_batas_kalender = null;
+        if ($cekta) {
+            $kalender_skripsi = DB::table('akd_kalender_akademik')
+                ->where('tahun', $cekta->tahun)
+                ->where('semester', $cekta->semester)
+                ->where('trash', '0')
+                ->where(function($q) {
+                    $q->where('nama_kegiatan', 'like', '%Skripsi%')
+                      ->orWhere('nama_kegiatan', 'like', '%Yudisium%')
+                      ->orWhere('nama_kegiatan', 'like', '%Tugas Akhir%')
+                      ->orWhere('kode_kegiatan_akademik', '25');
+                })
+                ->orderBy('tanggal_akhir', 'desc')
+                ->first();
+
+            if (!$kalender_skripsi) {
+                $kalender_skripsi = DB::table('akd_kalender_akademik')
+                    ->where('tahun', $cekta->tahun)
+                    ->where('semester', $cekta->semester)
+                    ->where('trash', '0')
+                    ->orderBy('tanggal_akhir', 'desc')
+                    ->first();
+            }
+
+            if ($kalender_skripsi && !empty($kalender_skripsi->tanggal_akhir)) {
+                $tgl_batas_kalender = $kalender_skripsi->tanggal_akhir;
+                $today = date('Y-m-d');
+                if ($today > $tgl_batas_kalender) {
+                    // Fairness Rule Check
+                    if ($skripsi && $skripsi->status === 'lulus') {
+                        $is_expired = false;
+                    } else if ($ujian && in_array($ujian->status, ['ditetapkan', 'lulus'])) {
+                        $is_expired = false;
+                    } else if ($ujian && !empty($ujian->tanggal_ujian) && $ujian->tanggal_ujian <= $tgl_batas_kalender) {
+                        $is_expired = false;
+                    } else {
+                        $is_expired = true;
+                    }
+                }
+            }
+        }
+
         // 6. Logika CTA
-        $cta = $this->calculateCTA($mhs, $bayar_ta, $skripsi, $sempro, $total_bimbingan, $bayar_ujian, $ujian, $stats, $ujian_detail);
+        $cta = $this->calculateCTA($mhs, $bayar_ta, $skripsi, $sempro, $total_bimbingan, $bayar_ujian, $ujian, $stats, $ujian_detail, $is_expired, $tgl_batas_kalender);
 
         return [
             'mhs' => [
@@ -756,7 +800,9 @@ class Mskripsi extends Model
                 'persen' => round(($total_bimbingan / (max(1, $mhs->ta_minimal_bimbingan))) * 100)
             ],
             'ujian' => $ujian,
-            'cta' => $cta
+            'cta' => $cta,
+            'is_expired' => $is_expired,
+            'tgl_batas_kalender' => $tgl_batas_kalender
         ];
     }
 
@@ -796,9 +842,21 @@ class Mskripsi extends Model
         "))->count();
     }
 
-    private function calculateCTA($mhs, $bayar_ta, $skripsi, $sempro, $total_bimbingan, $bayar_ujian, $ujian, $stats, $ujian_detail = null)
+    private function calculateCTA($mhs, $bayar_ta, $skripsi, $sempro, $total_bimbingan, $bayar_ujian, $ujian, $stats, $ujian_detail = null, $is_expired = false, $tgl_batas_kalender = null)
     {
         $min_bimbingan_ujian = 8;
+
+        if ($is_expired) {
+            $formatted_date = $tgl_batas_kalender ? date('d M Y', strtotime($tgl_batas_kalender)) : 'Batas Semester';
+            return [
+                'label' => '🔒 Masa Skripsi Semester Ini Telah Berakhir (' . $formatted_date . ')',
+                'url' => '#',
+                'warna' => 'secondary',
+                'disabled' => true,
+                'is_expired' => true,
+                'tgl_batas_kalender' => $tgl_batas_kalender
+            ];
+        }
 
         if (!$bayar_ta) {
             return ['label' => 'Lunasi Pembayaran ' . $mhs->ta_nama_tugas_akhir, 'url' => 'mahasiswa/statuspembayaran', 'warna' => 'warning', 'disabled' => false];

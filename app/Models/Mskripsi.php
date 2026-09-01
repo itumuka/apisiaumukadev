@@ -222,7 +222,7 @@ class Mskripsi extends Model
                 $nama_biaya_ujian = $prodiConfig->ta_komponen_bayar_ujian ?: $prodiConfig->ta_komponen_bayar;
                 $label_syarat_ujian = !empty($prodiConfig->ta_komponen_bayar_ujian) 
                     ? 'Pembayaran Biaya Ujian Skripsi' 
-                    : 'Pembayaran Biaya Tugas Akhir (Bimbingan & Ujian)';
+                    : 'Pembayaran Biaya ' . ($prodiConfig->ta_komponen_bayar ?: 'Tugas Akhir');
 
                 if ($nama_biaya_ujian) {
                     $hasFullScholarship = DB::table('keu_beasiswa_mahasiswa as bm')

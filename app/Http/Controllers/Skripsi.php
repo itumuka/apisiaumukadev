@@ -101,7 +101,7 @@ class Skripsi extends Controller
             if ($prodiConfig) {
                 $is_obe = isset($prodiConfig->ta_is_obe) ? $prodiConfig->ta_is_obe : 1;
                 if ($fase == 'ujian') {
-                    // Check if student has a dispensation for SKRIPSI
+                    // Check if student has a dispensation for SKRIPSI / TA
                     $cekta = DB::table('akd_mreg')->where('trash', '1')->first();
                     $hasDispensasi = false;
                     if ($cekta) {
@@ -109,9 +109,13 @@ class Skripsi extends Controller
                             ->where('nim', $nim)
                             ->where('tahun', $cekta->tahun)
                             ->where('semester', $cekta->semester)
-                            ->where('jenis', 'SKRIPSI')
+                            ->whereIn('jenis', ['SKRIPSI', 'TA', 'TUGAS AKHIR'])
                             ->exists();
                     }
+
+                    $nama_biaya = !empty($prodiConfig->ta_komponen_bayar_ujian) 
+                        ? $prodiConfig->ta_komponen_bayar_ujian 
+                        : $prodiConfig->ta_komponen_bayar;
 
                     $hasFullScholarship = DB::table('keu_beasiswa_mahasiswa as bm')
                         ->join('keu_sumber_beasiswa as s', 'bm.id_sumber_beasiswa', '=', 's.id_sumber_beasiswa')
@@ -125,23 +129,23 @@ class Skripsi extends Controller
                         ->where('bm.nim', $nim)
                         ->where('bm.status_aktif', 1)
                         ->where('bc.persentase_potongan', 100.00)
-                        ->where(function($q) use ($prodiConfig) {
-                            $q->where('bc.kode_komponen', 'like', '%' . $prodiConfig->ta_komponen_bayar_ujian . '%')
-                              ->orWhere('bc.kode_komponen', 'like', '%Ujian%');
+                        ->where(function($q) use ($nama_biaya) {
+                            $q->where('bc.kode_komponen', 'like', '%' . ($nama_biaya ?: 'Ujian') . '%')
+                              ->orWhere('bc.kode_komponen', 'like', '%Ujian%')
+                              ->orWhere('bc.kode_komponen', 'like', '%Tugas Akhir%')
+                              ->orWhere('bc.kode_komponen', 'like', '%TA%');
                         })
                         ->exists();
 
                     if ($hasDispensasi || $hasUjianScholarship) {
                         $bayar_ujian = true;
-                    } else if (!empty($prodiConfig->ta_komponen_bayar_ujian)) {
-                        $nama_biaya = $prodiConfig->ta_komponen_bayar_ujian;
+                    } else if (!empty($nama_biaya)) {
                         $bayar_ujian = DB::table('keu_tagihan')
                             ->where('nim', $nim)
                             ->where('nama_biaya', 'like', '%' . $nama_biaya . '%')
                             ->where('status', '1')
                             ->count() > 0;
                     } else {
-                        // Jika komponen bayar ujian kosong (seperti D3 Tugas Akhir), dianggap lunas / tanpa bayar ujian
                         $bayar_ujian = true;
                     }
                 }

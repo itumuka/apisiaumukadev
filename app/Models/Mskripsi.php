@@ -218,56 +218,65 @@ class Mskripsi extends Model
                 if (!$ujian_acc) $semua_lolos = false;
             }
             
-            if ($fase == 'ujian' && $prodiConfig->ta_komponen_bayar_ujian) {
-                $hasFullScholarship = DB::table('keu_beasiswa_mahasiswa as bm')
-                    ->join('keu_sumber_beasiswa as s', 'bm.id_sumber_beasiswa', '=', 's.id_sumber_beasiswa')
-                    ->where('bm.nim', $nim)
-                    ->where('bm.status_aktif', 1)
-                    ->where('s.jenis_beasiswa', 'full')
-                    ->exists();
+            if ($fase == 'ujian') {
+                $nama_biaya_ujian = $prodiConfig->ta_komponen_bayar_ujian ?: $prodiConfig->ta_komponen_bayar;
+                $label_syarat_ujian = !empty($prodiConfig->ta_komponen_bayar_ujian) 
+                    ? 'Pembayaran Biaya Ujian Skripsi' 
+                    : 'Pembayaran Biaya Tugas Akhir (Bimbingan & Ujian)';
 
-                $hasUjianScholarship = $hasFullScholarship || DB::table('keu_beasiswa_mahasiswa as bm')
-                    ->join('keu_beasiswa_cakupan as bc', 'bm.id_sumber_beasiswa', '=', 'bc.id_sumber_beasiswa')
-                    ->where('bm.nim', $nim)
-                    ->where('bm.status_aktif', 1)
-                    ->where('bc.persentase_potongan', 100.00)
-                    ->where(function($q) use ($prodiConfig) {
-                        $q->where('bc.kode_komponen', 'like', '%' . $prodiConfig->ta_komponen_bayar_ujian . '%')
-                          ->orWhere('bc.kode_komponen', 'like', '%Ujian%');
-                    })
-                    ->exists();
-
-                $cekta = DB::table('akd_mreg')->where('trash', '1')->first();
-                $hasDispensasi = false;
-                if ($cekta) {
-                    $hasDispensasi = DB::table('akd_dispensasi')
-                        ->where('nim', $nim)
-                        ->where('tahun', $cekta->tahun)
-                        ->where('semester', $cekta->semester)
-                        ->where('jenis', 'SKRIPSI')
+                if ($nama_biaya_ujian) {
+                    $hasFullScholarship = DB::table('keu_beasiswa_mahasiswa as bm')
+                        ->join('keu_sumber_beasiswa as s', 'bm.id_sumber_beasiswa', '=', 's.id_sumber_beasiswa')
+                        ->where('bm.nim', $nim)
+                        ->where('bm.status_aktif', 1)
+                        ->where('s.jenis_beasiswa', 'full')
                         ->exists();
-                }
 
-                $bayar_ujian = $hasDispensasi || $hasUjianScholarship || (DB::table('keu_tagihan')
-                    ->where('nim', $nim)
-                    ->where('nama_biaya', 'like', '%' . $prodiConfig->ta_komponen_bayar_ujian . '%')
-                    ->where('status', '1')
-                    ->count() > 0);
-                
-                if (!$bayar_ujian && !$is_obe) $semua_lolos = false;
-                
-                $hasil[] = [
-                    'no' => $index++,
-                    'id_syarat_prodi' => null,
-                    'syarat' => 'Pembayaran Biaya Ujian Skripsi',
-                    'isi' => $hasDispensasi ? 'Sudah Lunas (Dispensasi)' : ($bayar_ujian ? 'Sudah Lunas' : 'Belum Lunas'),
-                    'hubungi' => 'Bagian Keuangan',
-                    'status' => $bayar_ujian ? 'v' : 'x',
-                    'jenis' => 'pembayaran',
-                    'is_wajib' => 1,
-                    'tipe_upload' => null,
-                    'kode_syarat' => 'BAYAR_UJIAN'
-                ];
+                    $hasUjianScholarship = $hasFullScholarship || DB::table('keu_beasiswa_mahasiswa as bm')
+                        ->join('keu_beasiswa_cakupan as bc', 'bm.id_sumber_beasiswa', '=', 'bc.id_sumber_beasiswa')
+                        ->where('bm.nim', $nim)
+                        ->where('bm.status_aktif', 1)
+                        ->where('bc.persentase_potongan', 100.00)
+                        ->where(function($q) use ($nama_biaya_ujian) {
+                            $q->where('bc.kode_komponen', 'like', '%' . $nama_biaya_ujian . '%')
+                              ->orWhere('bc.kode_komponen', 'like', '%Ujian%')
+                              ->orWhere('bc.kode_komponen', 'like', '%Tugas Akhir%')
+                              ->orWhere('bc.kode_komponen', 'like', '%TA%');
+                        })
+                        ->exists();
+
+                    $cekta = DB::table('akd_mreg')->where('trash', '1')->first();
+                    $hasDispensasi = false;
+                    if ($cekta) {
+                        $hasDispensasi = DB::table('akd_dispensasi')
+                            ->where('nim', $nim)
+                            ->where('tahun', $cekta->tahun)
+                            ->where('semester', $cekta->semester)
+                            ->whereIn('jenis', ['SKRIPSI', 'TA', 'TUGAS AKHIR'])
+                            ->exists();
+                    }
+
+                    $bayar_ujian = $hasDispensasi || $hasUjianScholarship || (DB::table('keu_tagihan')
+                        ->where('nim', $nim)
+                        ->where('nama_biaya', 'like', '%' . $nama_biaya_ujian . '%')
+                        ->where('status', '1')
+                        ->count() > 0);
+                    
+                    if (!$bayar_ujian && !$is_obe) $semua_lolos = false;
+                    
+                    $hasil[] = [
+                        'no' => $index++,
+                        'id_syarat_prodi' => null,
+                        'syarat' => $label_syarat_ujian,
+                        'isi' => $hasDispensasi ? 'Sudah Lunas (Dispensasi)' : ($bayar_ujian ? 'Sudah Lunas' : 'Belum Lunas'),
+                        'hubungi' => 'Bagian Keuangan',
+                        'status' => $bayar_ujian ? 'v' : 'x',
+                        'jenis' => 'pembayaran',
+                        'is_wajib' => 1,
+                        'tipe_upload' => null,
+                        'kode_syarat' => 'BAYAR_UJIAN'
+                    ];
+                }
             }
 
             // 6. Seminar Proposal Requirement (if enabled by prodi)
@@ -422,8 +431,8 @@ class Mskripsi extends Model
                 // Use prodi config for payment component name if available
                 if ($fase == 'sempro' && $prodiConfig->ta_komponen_bayar) {
                     $nama_biaya = $prodiConfig->ta_komponen_bayar;
-                } else if ($fase == 'ujian' && $prodiConfig->ta_komponen_bayar_ujian) {
-                    $nama_biaya = $prodiConfig->ta_komponen_bayar_ujian;
+                } else if ($fase == 'ujian' && ($prodiConfig->ta_komponen_bayar_ujian || $prodiConfig->ta_komponen_bayar)) {
+                    $nama_biaya = $prodiConfig->ta_komponen_bayar_ujian ?: $prodiConfig->ta_komponen_bayar;
                 } else {
                     $nama_biaya = $rule->nilai_target ?: ($fase == 'sempro' ? 'Bimbingan Skripsi' : 'Ujian Skripsi');
                 }
@@ -642,20 +651,23 @@ class Mskripsi extends Model
             ->where('s.jenis_beasiswa', 'full')
             ->exists();
 
+        $komponen_bayar_ujian = $mhs->ta_komponen_bayar_ujian ?: $mhs->ta_komponen_bayar;
         $hasUjianScholarship = $hasFullScholarship || DB::table('keu_beasiswa_mahasiswa as bm')
             ->join('keu_beasiswa_cakupan as bc', 'bm.id_sumber_beasiswa', '=', 'bc.id_sumber_beasiswa')
             ->where('bm.nim', $nim)
             ->where('bm.status_aktif', 1)
             ->where('bc.persentase_potongan', 100.00)
-            ->where(function($q) use ($mhs) {
-                $q->where('bc.kode_komponen', 'like', '%' . ($mhs->ta_komponen_bayar_ujian ?: 'Ujian') . '%')
-                  ->orWhere('bc.kode_komponen', 'like', '%Ujian%');
+            ->where(function($q) use ($komponen_bayar_ujian) {
+                $q->where('bc.kode_komponen', 'like', '%' . ($komponen_bayar_ujian ?: 'Ujian') . '%')
+                  ->orWhere('bc.kode_komponen', 'like', '%Ujian%')
+                  ->orWhere('bc.kode_komponen', 'like', '%Tugas Akhir%')
+                  ->orWhere('bc.kode_komponen', 'like', '%TA%');
             })
             ->exists();
 
-        $bayar_ujian = $hasDispensasi || $hasUjianScholarship || (($mhs->ta_komponen_bayar_ujian) ? DB::table('keu_tagihan')
+        $bayar_ujian = $hasDispensasi || $hasUjianScholarship || (($komponen_bayar_ujian) ? DB::table('keu_tagihan')
             ->where('nim', $nim)
-            ->where('nama_biaya', 'like', '%' . $mhs->ta_komponen_bayar_ujian . '%')
+            ->where('nama_biaya', 'like', '%' . $komponen_bayar_ujian . '%')
             ->where('status', '1')
             ->count() > 0 : true);
 

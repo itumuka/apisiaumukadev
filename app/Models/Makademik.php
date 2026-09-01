@@ -2132,8 +2132,8 @@ TIME_FORMAT(jam_mulai, '%H:%i') AS jam_mulai, TIME_FORMAT(jam_selesai, '%H:%i') 
                 LEFT JOIN akd_fakultas e ON b.kode_fakultas=e.kode_fakultas 
                 LEFT JOIN mst_agama f ON b.kode_agama=f.kode_agama 
                 LEFT JOIN mst_kewarganegaraan g ON b.kode_kewarganegaraan=g.kode_kewarganegaraan 
-                LEFT JOIN akd_ortu_ayah h ON a.nim=h.nim 
-                LEFT JOIN akd_ortu_ibu i ON a.nim=i.nim 
+                LEFT JOIN adm_ortu_ayah h ON b.no_pendaftaran=h.no_pendaftaran 
+                LEFT JOIN adm_ortu_ibu i ON b.no_pendaftaran=i.no_pendaftaran 
                 LEFT JOIN adm_jalur_pmb j ON b.kode_jalur_pmb=j.kode_jalur_pmb 
                 LEFT JOIN akd_program_pendidikan k ON a.kode_program_pendidikan=k.kode_program_pendidikan 
                 LEFT JOIN mst_pekerjaan l ON h.kode_pekerjaan=l.kode_pekerjaan 
@@ -2912,8 +2912,8 @@ TIME_FORMAT(jam_mulai, '%H:%i') AS jam_mulai, TIME_FORMAT(jam_selesai, '%H:%i') 
                 LEFT JOIN akd_fakultas e ON b.kode_fakultas=e.kode_fakultas 
                 LEFT JOIN mst_agama f ON b.kode_agama=f.kode_agama 
                 LEFT JOIN mst_kewarganegaraan g ON b.kode_kewarganegaraan=g.kode_kewarganegaraan 
-                LEFT JOIN akd_ortu_ayah h ON b.no_pendaftaran=h.no_pendaftaran 
-                LEFT JOIN akd_ortu_ibu i ON b.no_pendaftaran=i.no_pendaftaran 
+                LEFT JOIN adm_ortu_ayah h ON b.no_pendaftaran=h.no_pendaftaran 
+                LEFT JOIN adm_ortu_ibu i ON b.no_pendaftaran=i.no_pendaftaran 
                 LEFT JOIN adm_jalur_pmb j ON b.kode_jalur_pmb=j.kode_jalur_pmb 
                 LEFT JOIN akd_program_pendidikan k ON b.kode_program_pendidikan=k.kode_program_pendidikan 
                 LEFT JOIN mst_pekerjaan l ON h.kode_pekerjaan=l.kode_pekerjaan 

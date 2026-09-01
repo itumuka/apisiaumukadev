@@ -37,7 +37,7 @@ class Mskripsi extends Model
         // 2. Get Program Studi Configuration
         $prodiConfig = DB::table('akd_program_studi')
             ->where('kode_program_studi', $mhs->kode_program_studi)
-            ->select('ta_sks_minimal', 'ta_ada_sempro', 'ta_minimal_bimbingan', 'ta_komponen_bayar', 'ta_komponen_bayar_ujian')
+            ->select('ta_sks_minimal', 'ta_ada_sempro', 'ta_minimal_bimbingan', 'ta_komponen_bayar', 'ta_komponen_bayar_ujian', 'ta_is_obe')
             ->first();
 
         // 3. Daftar Syarat from syarat_prodi table

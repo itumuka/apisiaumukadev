@@ -96,7 +96,7 @@ class Skripsi extends Controller
         if ($mhs) {
             $prodiConfig = DB::table('akd_program_studi')
                 ->where('kode_program_studi', $mhs->kode_program_studi)
-                ->select('ta_komponen_bayar_ujian', 'ta_is_obe')
+                ->select('ta_komponen_bayar', 'ta_komponen_bayar_ujian', 'ta_is_obe')
                 ->first();
             if ($prodiConfig) {
                 $is_obe = isset($prodiConfig->ta_is_obe) ? $prodiConfig->ta_is_obe : 1;

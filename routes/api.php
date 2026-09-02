@@ -510,5 +510,12 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::get("/akademik/transkrip-ajuan", "Akademik@get_all_transkrip_ajuan")->name('akademik_get_all_transkrip_ajuan');
     Route::post("/akademik/transkrip-ajuan/approve", "Akademik@approve_transkrip_ajuan")->name('akademik_approve_transkrip_ajuan');
     Route::post("/akademik/transkrip-ajuan/cancel", "Akademik@cancel_transkrip_ajuan")->name('akademik_cancel_transkrip_ajuan');
+
+    // Modul Perpanjangan Studi / Skripsi APIs
+    Route::get("/mahasiswa/skripsi/cek-syarat-perpanjangan", "SkripsiPerpanjangan@cek_syarat_perpanjangan")->name('skripsi_cek_syarat_perpanjangan');
+    Route::post("/mahasiswa/skripsi/ajukan-perpanjangan", "SkripsiPerpanjangan@ajukan_perpanjangan")->name('skripsi_ajukan_perpanjangan');
+    Route::get("/kaprodi/skripsi/perpanjangan/list", "SkripsiPerpanjangan@list_perpanjangan_kaprodi")->name('skripsi_kaprodi_list_perpanjangan');
+    Route::get("/keuangan/skripsi/perpanjangan/list", "SkripsiPerpanjangan@list_perpanjangan_keuangan")->name('skripsi_keuangan_list_perpanjangan');
+    Route::post("/keuangan/skripsi/perpanjangan/verifikasi", "SkripsiPerpanjangan@verifikasi_keuangan")->name('skripsi_keuangan_verifikasi_perpanjangan');
 });
 

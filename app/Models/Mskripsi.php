@@ -784,8 +784,18 @@ class Mskripsi extends Model
             }
         }
 
+        // Cek Perpanjangan Studi
+        $perpanjangan = DB::table('akd_skripsi_perpanjangan')
+            ->where('nim', $nim)
+            ->orderBy('id', 'desc')
+            ->first();
+
+        if ($perpanjangan && $perpanjangan->status_final === 'disetujui' && $perpanjangan->status_keuangan === 'lunas') {
+            $is_expired = false;
+        }
+
         // 6. Logika CTA
-        $cta = $this->calculateCTA($mhs, $bayar_ta, $skripsi, $sempro, $total_bimbingan, $bayar_ujian, $ujian, $stats, $ujian_detail, $is_expired, $tgl_batas_kalender);
+        $cta = $this->calculateCTA($mhs, $bayar_ta, $skripsi, $sempro, $total_bimbingan, $bayar_ujian, $ujian, $stats, $ujian_detail, $is_expired, $tgl_batas_kalender, $perpanjangan);
 
         return [
             'mhs' => [
@@ -818,7 +828,8 @@ class Mskripsi extends Model
             'ujian' => $ujian,
             'cta' => $cta,
             'is_expired' => $is_expired,
-            'tgl_batas_kalender' => $tgl_batas_kalender
+            'tgl_batas_kalender' => $tgl_batas_kalender,
+            'perpanjangan' => $perpanjangan
         ];
     }
 
@@ -858,19 +869,35 @@ class Mskripsi extends Model
         "))->count();
     }
 
-    private function calculateCTA($mhs, $bayar_ta, $skripsi, $sempro, $total_bimbingan, $bayar_ujian, $ujian, $stats, $ujian_detail = null, $is_expired = false, $tgl_batas_kalender = null)
+    private function calculateCTA($mhs, $bayar_ta, $skripsi, $sempro, $total_bimbingan, $bayar_ujian, $ujian, $stats, $ujian_detail = null, $is_expired = false, $tgl_batas_kalender = null, $perpanjangan = null)
     {
         $min_bimbingan_ujian = 8;
 
         if ($is_expired) {
             $formatted_date = $tgl_batas_kalender ? date('d M Y', strtotime($tgl_batas_kalender)) : 'Batas Semester';
+
+            if ($perpanjangan && $perpanjangan->status_final === 'diajukan') {
+                return [
+                    'label' => '⏳ Pengajuan Perpanjangan Sedang Diproses Keuangan',
+                    'url' => 'javascript:void(0)',
+                    'onclick' => 'openModalStatusPerpanjangan()',
+                    'warna' => 'warning',
+                    'disabled' => false,
+                    'is_expired' => true,
+                    'tgl_batas_kalender' => $tgl_batas_kalender,
+                    'perpanjangan_status' => 'diajukan'
+                ];
+            }
+
             return [
-                'label' => '🔒 Masa Skripsi Semester Ini Telah Berakhir (' . $formatted_date . ')',
-                'url' => '#',
-                'warna' => 'secondary',
-                'disabled' => true,
+                'label' => '📝 Ajukan Perpanjangan Masa Studi',
+                'url' => 'javascript:void(0)',
+                'onclick' => 'openModalAjukanPerpanjangan()',
+                'warna' => 'danger',
+                'disabled' => false,
                 'is_expired' => true,
-                'tgl_batas_kalender' => $tgl_batas_kalender
+                'tgl_batas_kalender' => $tgl_batas_kalender,
+                'perpanjangan_status' => 'belum_mengajukan'
             ];
         }
 

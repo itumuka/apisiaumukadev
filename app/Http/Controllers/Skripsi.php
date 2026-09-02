@@ -196,6 +196,18 @@ class Skripsi extends Controller
                         $is_expired = true;
                     }
                 }
+
+                // Cek apakah mahasiswa memiliki izin perpanjangan studi yang disetujui (keuangan lunas)
+                $perpanjangan = DB::table('akd_skripsi_perpanjangan')
+                    ->where('nim', $nim)
+                    ->where('status_final', 'disetujui')
+                    ->where('status_keuangan', 'lunas')
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                if ($perpanjangan) {
+                    $is_expired = false;
+                }
             }
         }
 

@@ -1086,9 +1086,14 @@ class Mmahasiswa extends Model
     public function tampilstatuspembayaran(Request $request)
     {
         $nim = $request->nim;
-        $sttpem = DB::select("SELECT a.id_tagihan,a.kode_biling,a.nama_biaya,a.tahun,a.semester,a.biaya,(SELECT IF(SUM(bayar) IS NULL,0,SUM(bayar)) AS bayar FROM keu_bayar kb WHERE a.id_tagihan=kb.id_tagihan) AS jumbayar,a.status,(SELECT nim FROM keu_virtual_akun WHERE kode=a.kode_biling) AS kodeva FROM keu_tagihan a 
-        JOIN akd_mahasiswa b ON a.nim=b.nim JOIN akd_program_studi c  ON c.kode_program_studi=b.kode_program_studi 
-        WHERE a.nim='$nim' AND a.status='0' ORDER BY a.id_tagihan DESC");
+        $sttpem = DB::select("SELECT a.id_tagihan,a.kode_biling,a.nama_biaya,a.tahun,a.semester,a.biaya,
+            (SELECT IF(SUM(bayar) IS NULL,0,SUM(bayar)) AS bayar FROM keu_bayar kb WHERE a.id_tagihan=kb.id_tagihan) AS jumbayar,
+            a.status,
+            (SELECT nim FROM keu_virtual_akun WHERE kode=a.kode_biling LIMIT 1) AS kodeva,
+            (SELECT account_id FROM keu_virtual_akun WHERE kode=a.kode_biling LIMIT 1) AS bank_va 
+            FROM keu_tagihan a 
+            JOIN akd_mahasiswa b ON a.nim=b.nim JOIN akd_program_studi c ON c.kode_program_studi=b.kode_program_studi 
+            WHERE a.nim='$nim' AND a.status='0' ORDER BY a.id_tagihan DESC");
 
         return $sttpem;
     }

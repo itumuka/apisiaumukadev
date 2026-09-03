@@ -27,5 +27,15 @@ class PembayaranController extends Controller
         return $result;
     }
 
+    /**
+     * Generate on-demand multi-bank virtual account for student
+     * 
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function generateVa(Request $request)
+    {
+        return $this->pembayaran->generateVa($request);
+    }
 }
 

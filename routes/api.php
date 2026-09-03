@@ -65,6 +65,7 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::get("/mahasiswa/tampilstatuspembayaran", "Mahasiswa@tampilstatuspembayaran")->name('tampilstatuspembayaran');
     Route::get("/mahasiswa/tampilstatuspembayaranriwayat", "Mahasiswa@tampilstatuspembayaranriwayat")->name('tampilstatuspembayaranriwayat');
     Route::post("/mahasiswa/generate-group-va", "PembayaranController@updateByKodeBiling")->name('mhsgenerate_group_va');
+    Route::post("/mahasiswa/generate-va", "PembayaranController@generateVa")->name('mhs_generate_va');
     
     Route::post("/mahasiswa/simpan-profil-mahasiswa", "Mahasiswa@simpan_user_profil")->name('mhssimpan_user_profil');
     Route::post("/mahasiswa/simpan-pendidikan-mahasiswa", "Mahasiswa@simpan_pendidikan_mahasiswa")->name('mhssimpan_pendidikan_mahasiswa');

@@ -83,8 +83,24 @@ class Pembayaran extends Model
     }
 
     /**
-     * Generate Virtual Account on-demand for student
-     * Supports 3 Banks: BNI, Bank Mega Syariah (BMS), Bank Jateng Syariah (BJS)
+     * Ambil daftar metode pembayaran bank aktif dari master keu_bank_h2h
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function metodePembayaranAktif()
+    {
+        $manager = new \App\Services\Payment\PaymentManager();
+        $banks = $manager->getActiveBanks();
+
+        return response()->json([
+            'success' => true,
+            'data' => $banks
+        ], 200);
+    }
+
+    /**
+     * Generate Virtual Account on-demand for student using dynamic PaymentManager
+     * Supports PULL (Inquiry) and PUSH (API Create) for any active bank
      *
      * @param Request $request
      * @return \Illuminate\Http\JsonResponse
@@ -92,7 +108,7 @@ class Pembayaran extends Model
     public function generateVa(Request $request)
     {
         $nim = $request->nim;
-        $bank = strtolower($request->bank ?? 'bni'); // bni | bms | bjt
+        $bank = strtolower($request->bank ?? 'bni');
         $idTagihan = $request->id_tagihan;
 
         if (empty($nim)) {
@@ -156,114 +172,27 @@ class Pembayaran extends Model
             ], 404);
         }
 
-        // Calculate total amount and combined description
-        $totalAmount = 0;
-        $namaTagihan = [];
-        $firstBill = $bills->first();
+        // Gunakan PaymentManager dinamis
+        $manager = new \App\Services\Payment\PaymentManager();
+        $bankConfig = $manager->getBankConfig($bank);
 
-        foreach ($bills as $b) {
-            $sudahBayar = DB::table('keu_bayar')->where('id_tagihan', $b->id_tagihan)->sum('bayar') ?: 0;
-            $sisa = (int)$b->biaya - (int)$sudahBayar;
-            $totalAmount += ($sisa > 0 ? $sisa : (int)$b->biaya);
-            $namaTagihan[] = $b->nama_biaya;
-        }
-
-        $namaTagihanGabungan = implode(', ', array_unique($namaTagihan));
-        if (strlen($namaTagihanGabungan) > 240) {
-            $namaTagihanGabungan = substr($namaTagihanGabungan, 0, 237) . '...';
-        }
-
-        // Determine Bank-Specific VA Rules
-        $cleanNumericNim = preg_replace('/[^0-9]/', '', $nim);
-        $bankName = '';
-        $accountID = '';
-        $nomorVA = '';
-
-        if ($bank === 'bni') {
-            // BNI eCollection: 16 digits (988 + 22601 + 8 digits random numeric)
-            $bankName = 'Bank BNI (Bank Negara Indonesia)';
-            $accountID = 'BNI';
-            do {
-                $rand8 = str_pad(mt_rand(10000000, 99999999), 8, '0', STR_PAD_LEFT);
-                $nomorVA = '98822601' . $rand8;
-                $exists = DB::table('keu_virtual_akun')->where('nim', $nomorVA)->exists();
-            } while ($exists);
-
-        } elseif ($bank === 'bms') {
-            // Bank Mega Syariah: Month (2) + Year (2) + 7 digit numeric NIM
-            $bankName = 'Bank Mega Syariah';
-            $accountID = 'BMS';
-            $nomorVA = date('m') . date('y') . substr($cleanNumericNim, -7);
-
-        } elseif ($bank === 'bjt') {
-            // Bank Jateng Syariah: 7 digit numerik terakhir NIM
-            $bankName = 'Bank Jateng Syariah';
-            $accountID = 'BJT';
-            $nomorVA = substr($cleanNumericNim, -7);
-
-        } else {
+        if (!$bankConfig || !$bankConfig->is_active) {
             return response()->json([
                 'success' => false,
-                'message' => 'Pilihan bank tidak valid. Pilih BNI, BMS, atau BJT.'
+                'message' => 'Metode pembayaran ' . strtoupper($bank) . ' sedang dinonaktifkan atau tidak terdaftar.'
             ], 400);
         }
 
-        // Generate 10-digit random billing code
-        do {
-            $kodeBiling = strval(mt_rand(1000000000, 9999999999));
-            $exists = DB::table('keu_virtual_akun')->where('kode', $kodeBiling)->exists();
-        } while ($exists);
-
-        DB::beginTransaction();
         try {
-            // Check & delete old unpaid virtual accounts for these bills if any
-            $oldCodes = $bills->pluck('kode_biling')->filter()->unique()->toArray();
-            if (!empty($oldCodes)) {
-                DB::table('keu_virtual_akun')->whereIn('kode', $oldCodes)->delete();
-            }
-
-            // Insert new virtual account
-            $taLabel = $firstBill->tahun ? ($firstBill->tahun . '/' . ((int)$firstBill->tahun + 1)) : date('Y') . '/' . (date('Y') + 1);
-
-            DB::table('keu_virtual_akun')->insert([
-                'kode' => $kodeBiling,
-                'nim' => $nomorVA,
-                'nama' => $mhs->nama_mahasiswa,
-                'jurusan' => $mhs->nama_program_studi,
-                'fakultas' => $mhs->nama_fakultas ?? '-',
-                'ta' => $taLabel,
-                'telp' => $mhs->telp ?? '-',
-                'tagihan' => $namaTagihanGabungan,
-                'nominal' => $totalAmount,
-                'account_id' => $accountID,
-                'created_at' => now(),
-            ]);
-
-            // Update keu_tagihan with new billing code
-            DB::table('keu_tagihan')
-                ->whereIn('id_tagihan', $bills->pluck('id_tagihan')->toArray())
-                ->update(['kode_biling' => $kodeBiling]);
-
-            DB::commit();
+            $result = $manager->createVirtualAccount($mhs, $bills->all(), $bankConfig);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Nomor Virtual Account ' . $bankName . ' berhasil dibuat.',
-                'data' => [
-                    'bank' => $bank,
-                    'bank_code' => $accountID,
-                    'bank_name' => $bankName,
-                    'nomor_va' => $nomorVA,
-                    'total_nominal' => $totalAmount,
-                    'kode_biling' => $kodeBiling,
-                    'nama_mahasiswa' => $mhs->nama_mahasiswa,
-                    'nama_tagihan' => $namaTagihanGabungan,
-                    'item_count' => $bills->count(),
-                ]
+                'message' => 'Nomor Virtual Account ' . $bankConfig->nama_bank . ' berhasil dibuat.',
+                'data' => $result
             ], 200);
 
         } catch (\Exception $e) {
-            DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal membuat Virtual Account: ' . $e->getMessage()

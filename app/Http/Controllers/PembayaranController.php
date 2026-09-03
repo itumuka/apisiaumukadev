@@ -37,5 +37,15 @@ class PembayaranController extends Controller
     {
         return $this->pembayaran->generateVa($request);
     }
+
+    /**
+     * Ambil daftar bank metode pembayaran aktif untuk portal mahasiswa
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function metodePembayaranAktif()
+    {
+        return $this->pembayaran->metodePembayaranAktif();
+    }
 }
 

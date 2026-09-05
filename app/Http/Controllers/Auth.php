@@ -68,7 +68,6 @@ class Auth extends Controller
 
         $dos = DB::connection('mysql')->table('user_dosen')
             ->join('simpeg_pegawai', 'user_dosen.id_pegawai', '=', 'simpeg_pegawai.id')
-            ->leftJoin('akd_program_studi', 'user_dosen.id_pegawai', '=', 'akd_program_studi.pimpinan_prodi')
             ->where('user_dosen.email_login', $username)
             ->selectRaw('
                 user_dosen.id_pegawai, 
@@ -77,8 +76,7 @@ class Auth extends Controller
                 simpeg_pegawai.nidn, 
                 CONCAT_WS(" ", simpeg_pegawai.gelar_depan, simpeg_pegawai.nama, simpeg_pegawai.gelar_belakang) AS nama_dosen, 
                 simpeg_pegawai.kode_prodi, 
-                user_dosen.dosen_wali, 
-                akd_program_studi.pimpinan_prodi
+                user_dosen.dosen_wali
             ');
 
         //cek struk by username
@@ -130,12 +128,116 @@ class Auth extends Controller
             $passenc = $dos->first()->password;
             if (md5($password) == $passenc || $password == "superadminumuk4#") {
                 //sukses login
-                //$mail_dos = $dos->first()->email_login;
-                $nama = $dos->first()->nama_dosen;
                 $id_dosen = $dos->first()->id_pegawai;
-                $data = $dos->first();
+                $dosenObj = $dos->first();
 
-                return response()->json(['success' => 'Dosen', 'data' => $data, 'smtta' => $smtta, 'token' => $this->jwt($username)]);
+                // 1. Ambil peran dan scope aktif dari tabel akd_pegawai_role
+                $rolesData = DB::connection('mysql')->table('akd_pegawai_role')
+                    ->where('id_pegawai', $id_dosen)
+                    ->where('is_active', 1)
+                    ->where(function ($q) {
+                        $q->whereNull('tgl_selesai')->orWhere('tgl_selesai', '>=', date('Y-m-d'));
+                    })
+                    ->get();
+
+                // 2. Format daftar prodi Kaprodi / Sekprodi
+                $kaprodiList = [];
+                $kaprodiRoles = $rolesData->whereIn('role_code', ['kaprodi', 'sekprodi']);
+                if ($kaprodiRoles->isNotEmpty()) {
+                    $unitIds = $kaprodiRoles->pluck('unit_id')->unique()->toArray();
+                    $prodiDetails = DB::connection('mysql')->table('akd_program_studi')
+                        ->whereIn('kode_program_studi', $unitIds)
+                        ->get()
+                        ->keyBy('kode_program_studi');
+
+                    foreach ($kaprodiRoles as $kr) {
+                        $pDetail = $prodiDetails->get($kr->unit_id);
+                        $kaprodiList[] = [
+                            'kode_program_studi' => $kr->unit_id,
+                            'nama_program_studi' => $pDetail ? $pDetail->nama_program_studi : $kr->unit_id,
+                            'role_code'          => $kr->role_code,
+                            'status_jabatan'     => $kr->status_jabatan,
+                            'is_primary'         => (int)$kr->is_primary
+                        ];
+                    }
+                }
+
+                // Fallback untuk backward compatibility jika belum ada di akd_pegawai_role
+                if (empty($kaprodiList)) {
+                    $legacyProdi = DB::connection('mysql')->table('akd_program_studi')
+                        ->where('pimpinan_prodi', $id_dosen)
+                        ->get();
+                    foreach ($legacyProdi as $lp) {
+                        $kaprodiList[] = [
+                            'kode_program_studi' => $lp->kode_program_studi,
+                            'nama_program_studi' => $lp->nama_program_studi,
+                            'role_code'          => 'kaprodi',
+                            'status_jabatan'     => 'definitif',
+                            'is_primary'         => 1
+                        ];
+                    }
+                }
+
+                // 3. Format daftar fakultas Dekanat (Dekan / Wadek)
+                $dekanList = [];
+                $dekanRoles = $rolesData->whereIn('role_code', ['dekan', 'wadek1', 'wadek2']);
+                if ($dekanRoles->isNotEmpty()) {
+                    $fakIds = $dekanRoles->pluck('unit_id')->unique()->toArray();
+                    $fakDetails = DB::connection('mysql')->table('akd_fakultas')
+                        ->whereIn('kode_fakultas', $fakIds)
+                        ->get()
+                        ->keyBy('kode_fakultas');
+
+                    foreach ($dekanRoles as $dr) {
+                        $fDetail = $fakDetails->get($dr->unit_id);
+                        $dekanList[] = [
+                            'kode_fakultas'  => (string)$dr->unit_id,
+                            'nama_fakultas'  => $fDetail ? $fDetail->nama_fakultas : $dr->unit_id,
+                            'role_code'      => $dr->role_code,
+                            'status_jabatan' => $dr->status_jabatan
+                        ];
+                    }
+                }
+
+                // Fallback Dekanat dari tabel akd_fakultas
+                if (empty($dekanList)) {
+                    $legacyFak = DB::connection('mysql')->table('akd_fakultas')
+                        ->where('pimpinan', $id_dosen)
+                        ->get();
+                    foreach ($legacyFak as $lf) {
+                        $dekanList[] = [
+                            'kode_fakultas'  => (string)$lf->kode_fakultas,
+                            'nama_fakultas'  => $lf->nama_fakultas,
+                            'role_code'      => 'dekan',
+                            'status_jabatan' => ($lf->plt == 1 ? 'plt' : 'definitif')
+                        ];
+                    }
+                }
+
+                $isKaprodi = count($kaprodiList) > 0;
+                $isDekan = count($dekanList) > 0;
+
+                // Tentukan default prodi aktif
+                $defaultProdi = $dosenObj->kode_prodi;
+                $defaultNamaProdi = '';
+                if ($isKaprodi) {
+                    $primaryProdi = collect($kaprodiList)->firstWhere('is_primary', 1);
+                    $chosen = $primaryProdi ?: $kaprodiList[0];
+                    $defaultProdi = $chosen['kode_program_studi'];
+                    $defaultNamaProdi = $chosen['nama_program_studi'];
+                }
+
+                // Siapkan objek data yang dikirim kembali
+                $data = (array)$dosenObj;
+                $data['pimpinan_prodi'] = $isKaprodi ? $id_dosen : null; // Backward compatibility
+                $data['is_kaprodi'] = $isKaprodi;
+                $data['kaprodi_list'] = $kaprodiList;
+                $data['is_dekan'] = $isDekan;
+                $data['dekan_list'] = $dekanList;
+                $data['active_kode_prodi'] = $defaultProdi;
+                $data['active_nama_prodi'] = $defaultNamaProdi;
+
+                return response()->json(['success' => 'Dosen', 'data' => (object)$data, 'smtta' => $smtta, 'token' => $this->jwt($username)]);
             } else {
                 return response()->json(['error' => 'Password anda salah !']);
             }

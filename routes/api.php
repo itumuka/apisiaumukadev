@@ -22,6 +22,7 @@ use App\Http\Middleware\Cors;
 Route::post("/auth-login", "Auth@auth")->name('auth_login');
 Route::get("/bearerToken", "Auth@bearerToken")->name('bearerToken');
 Route::get("/logout", "Auth@logout")->name('logout');
+Route::get("/dosen-roles/{id_dosen}", "Auth@getDosenRoles")->name('get_dosen_roles');
 Route::get("/check-session", "Mahasiswa@check_session")->name('check_session');
 Route::get('/debug-db-triggers', function() {
     return response()->json(Illuminate\Support\Facades\DB::select("SHOW TRIGGERS"));

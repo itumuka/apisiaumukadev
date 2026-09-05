@@ -289,5 +289,94 @@ class Auth extends Controller
         // return response()->json(['message' => 'Logout berhasil. Silakan login kembali.']);
         return response()->json(['Sudah Keluar' => 'Silahkan Login Lagi']);
     }
-    
+
+    public function getDosenRoles($id_dosen)
+    {
+        $rolesData = DB::connection('mysql')->table('akd_pegawai_role')
+            ->where('id_pegawai', $id_dosen)
+            ->where('is_active', 1)
+            ->where(function ($q) {
+                $q->whereNull('tgl_selesai')->orWhere('tgl_selesai', '>=', date('Y-m-d'));
+            })
+            ->get();
+
+        $kaprodiList = [];
+        $kaprodiRoles = $rolesData->whereIn('role_code', ['kaprodi', 'sekprodi']);
+        if ($kaprodiRoles->isNotEmpty()) {
+            $unitIds = $kaprodiRoles->pluck('unit_id')->unique()->toArray();
+            $prodiDetails = DB::connection('mysql')->table('akd_program_studi')
+                ->whereIn('kode_program_studi', $unitIds)
+                ->get()
+                ->keyBy('kode_program_studi');
+
+            foreach ($kaprodiRoles as $kr) {
+                $pDetail = $prodiDetails->get($kr->unit_id);
+                $kaprodiList[] = [
+                    'kode_program_studi' => $kr->unit_id,
+                    'nama_program_studi' => $pDetail ? $pDetail->nama_program_studi : $kr->unit_id,
+                    'role_code'          => $kr->role_code,
+                    'status_jabatan'     => $kr->status_jabatan,
+                    'is_primary'         => (int)$kr->is_primary
+                ];
+            }
+        }
+
+        if (empty($kaprodiList)) {
+            $legacyProdi = DB::connection('mysql')->table('akd_program_studi')
+                ->where('pimpinan_prodi', $id_dosen)
+                ->get();
+            foreach ($legacyProdi as $lp) {
+                $kaprodiList[] = [
+                    'kode_program_studi' => $lp->kode_program_studi,
+                    'nama_program_studi' => $lp->nama_program_studi,
+                    'role_code'          => 'kaprodi',
+                    'status_jabatan'     => 'definitif',
+                    'is_primary'         => 1
+                ];
+            }
+        }
+
+        $dekanList = [];
+        $dekanRoles = $rolesData->whereIn('role_code', ['dekan', 'wadek1', 'wadek2']);
+        if ($dekanRoles->isNotEmpty()) {
+            $fakIds = $dekanRoles->pluck('unit_id')->unique()->toArray();
+            $fakDetails = DB::connection('mysql')->table('akd_fakultas')
+                ->whereIn('kode_fakultas', $fakIds)
+                ->get()
+                ->keyBy('kode_fakultas');
+
+            foreach ($dekanRoles as $dr) {
+                $fDetail = $fakDetails->get($dr->unit_id);
+                $dekanList[] = [
+                    'kode_fakultas'  => (string)$dr->unit_id,
+                    'nama_fakultas'  => $fDetail ? $fDetail->nama_fakultas : $dr->unit_id,
+                    'role_code'      => $dr->role_code,
+                    'status_jabatan' => $dr->status_jabatan
+                ];
+            }
+        }
+
+        if (empty($dekanList)) {
+            $legacyFak = DB::connection('mysql')->table('akd_fakultas')
+                ->where('pimpinan', $id_dosen)
+                ->get();
+            foreach ($legacyFak as $lf) {
+                $dekanList[] = [
+                    'kode_fakultas'  => (string)$lf->kode_fakultas,
+                    'nama_fakultas'  => $lf->nama_fakultas,
+                    'role_code'      => 'dekan',
+                    'status_jabatan' => ($lf->plt == 1 ? 'plt' : 'definitif')
+                ];
+            }
+        }
+
+        return response()->json([
+            'status'       => true,
+            'id_dosen'     => $id_dosen,
+            'is_kaprodi'   => count($kaprodiList) > 0,
+            'kaprodi_list' => $kaprodiList,
+            'is_dekan'     => count($dekanList) > 0,
+            'dekan_list'   => $dekanList
+        ]);
+    }
 }

@@ -520,5 +520,15 @@ Route::middleware(['jwtverifie'])->group(function () {
     Route::get("/kaprodi/skripsi/perpanjangan/list", "SkripsiPerpanjangan@list_perpanjangan_kaprodi")->name('skripsi_kaprodi_list_perpanjangan');
     Route::get("/keuangan/skripsi/perpanjangan/list", "SkripsiPerpanjangan@list_perpanjangan_keuangan")->name('skripsi_keuangan_list_perpanjangan');
     Route::post("/keuangan/skripsi/perpanjangan/verifikasi", "SkripsiPerpanjangan@verifikasi_keuangan")->name('skripsi_keuangan_verifikasi_perpanjangan');
+
+    // Dynamic RBAC Management APIs
+    Route::get("/akademik/rbac", "RbacController@index")->name('akademik_rbac_index');
+    Route::get("/akademik/rbac/master-roles", "RbacController@getMasterRoles")->name('akademik_rbac_master_roles');
+    Route::get("/akademik/rbac/pegawai-options", "RbacController@getPegawaiOptions")->name('akademik_rbac_pegawai_options');
+    Route::get("/akademik/rbac/unit-options", "RbacController@getUnitOptions")->name('akademik_rbac_unit_options');
+    Route::post("/akademik/rbac", "RbacController@store")->name('akademik_rbac_store');
+    Route::put("/akademik/rbac/{id}", "RbacController@update")->name('akademik_rbac_update');
+    Route::delete("/akademik/rbac/{id}", "RbacController@destroy")->name('akademik_rbac_destroy');
+    Route::post("/akademik/rbac/{id}/toggle", "RbacController@toggleStatus")->name('akademik_rbac_toggle');
 });
 

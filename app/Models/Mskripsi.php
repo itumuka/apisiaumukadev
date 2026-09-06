@@ -343,9 +343,6 @@ class Mskripsi extends Model
                     }
                 }
 
-                $sikeuHost = env('SIKEU_URL', 'https://sikeudev.umuka.ac.id');
-                $cetakUrl = (!empty($bebasKeu)) ? rtrim($sikeuHost, '/') . '/bebas-keuangan/cetak/' . $bebasKeu->valid_id : null;
-
                 $isiStatus = '';
                 if (!empty($bebasKeu)) {
                     $isiStatus = 'Disahkan (Valid ID: ' . $bebasKeu->valid_id . ')';
@@ -366,8 +363,7 @@ class Mskripsi extends Model
                     'is_wajib' => 1,
                     'tipe_upload' => null,
                     'kode_syarat' => 'BEBAS_KEUANGAN_BAK',
-                    'valid_id' => !empty($bebasKeu) ? $bebasKeu->valid_id : null,
-                    'cetak_url' => $cetakUrl
+                    'valid_id' => !empty($bebasKeu) ? $bebasKeu->valid_id : null
                 ];
             }
             
@@ -654,9 +650,6 @@ class Mskripsi extends Model
                     }
                 }
 
-                $sikeuHost = env('SIKEU_URL', 'https://sikeudev.umuka.ac.id');
-                $cetakUrl = (!empty($bebasKeu)) ? rtrim($sikeuHost, '/') . '/bebas-keuangan/cetak/' . $bebasKeu->valid_id : null;
-
                 $isiStatus = '';
                 if (!empty($bebasKeu)) {
                     $isiStatus = 'Disahkan (Valid ID: ' . $bebasKeu->valid_id . ')';
@@ -677,8 +670,7 @@ class Mskripsi extends Model
                     'is_wajib' => 1,
                     'tipe_upload' => null,
                     'kode_syarat' => 'BEBAS_KEUANGAN_BAK',
-                    'valid_id' => !empty($bebasKeu) ? $bebasKeu->valid_id : null,
-                    'cetak_url' => $cetakUrl
+                    'valid_id' => !empty($bebasKeu) ? $bebasKeu->valid_id : null
                 ];
             }
         }

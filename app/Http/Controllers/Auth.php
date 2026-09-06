@@ -155,9 +155,9 @@ class Auth extends Controller
                         $kaprodiList[] = [
                             'kode_program_studi' => $kr->unit_id,
                             'nama_program_studi' => $pDetail ? $pDetail->nama_program_studi : $kr->unit_id,
-                            'role_code'          => $kr->role_code,
-                            'status_jabatan'     => $kr->status_jabatan,
-                            'is_primary'         => (int)$kr->is_primary
+                            'role_code' => $kr->role_code,
+                            'status_jabatan' => $kr->status_jabatan,
+                            'is_primary' => (int) $kr->is_primary
                         ];
                     }
                 }
@@ -171,9 +171,9 @@ class Auth extends Controller
                         $kaprodiList[] = [
                             'kode_program_studi' => $lp->kode_program_studi,
                             'nama_program_studi' => $lp->nama_program_studi,
-                            'role_code'          => 'kaprodi',
-                            'status_jabatan'     => 'definitif',
-                            'is_primary'         => 1
+                            'role_code' => 'kaprodi',
+                            'status_jabatan' => 'definitif',
+                            'is_primary' => 1
                         ];
                     }
                 }
@@ -191,9 +191,9 @@ class Auth extends Controller
                     foreach ($dekanRoles as $dr) {
                         $fDetail = $fakDetails->get($dr->unit_id);
                         $dekanList[] = [
-                            'kode_fakultas'  => (string)$dr->unit_id,
-                            'nama_fakultas'  => $fDetail ? $fDetail->nama_fakultas : $dr->unit_id,
-                            'role_code'      => $dr->role_code,
+                            'kode_fakultas' => (string) $dr->unit_id,
+                            'nama_fakultas' => $fDetail ? $fDetail->nama_fakultas : $dr->unit_id,
+                            'role_code' => $dr->role_code,
                             'status_jabatan' => $dr->status_jabatan
                         ];
                     }
@@ -206,9 +206,9 @@ class Auth extends Controller
                         ->get();
                     foreach ($legacyFak as $lf) {
                         $dekanList[] = [
-                            'kode_fakultas'  => (string)$lf->kode_fakultas,
-                            'nama_fakultas'  => $lf->nama_fakultas,
-                            'role_code'      => 'dekan',
+                            'kode_fakultas' => (string) $lf->kode_fakultas,
+                            'nama_fakultas' => $lf->nama_fakultas,
+                            'role_code' => 'dekan',
                             'status_jabatan' => ($lf->plt == 1 ? 'plt' : 'definitif')
                         ];
                     }
@@ -228,7 +228,7 @@ class Auth extends Controller
                 }
 
                 // Siapkan objek data yang dikirim kembali
-                $data = (array)$dosenObj;
+                $data = (array) $dosenObj;
                 $data['pimpinan_prodi'] = $isKaprodi ? $id_dosen : null; // Backward compatibility
                 $data['is_kaprodi'] = $isKaprodi;
                 $data['kaprodi_list'] = $kaprodiList;
@@ -237,7 +237,7 @@ class Auth extends Controller
                 $data['active_kode_prodi'] = $defaultProdi;
                 $data['active_nama_prodi'] = $defaultNamaProdi;
 
-                return response()->json(['success' => 'Dosen', 'data' => (object)$data, 'smtta' => $smtta, 'token' => $this->jwt($username)]);
+                return response()->json(['success' => 'Dosen', 'data' => (object) $data, 'smtta' => $smtta, 'token' => $this->jwt($username)]);
             } else {
                 return response()->json(['error' => 'Password anda salah !']);
             }
@@ -245,24 +245,24 @@ class Auth extends Controller
             return response()->json(['error' => 'Username tidak terdaftar !']);
         }
     }
-    
+
     protected function sendJwtToSiedom(Request $request)
     {
         $siedomUrl = env('SIEDOM_URL') . '/auth/sync-jwt'; // Endpoint di aplikasi SIEDOM
-    
+
         try {
             // Kirim request menggunakan Laravel HTTP Client
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . $request->token,
             ])->post($siedomUrl, [
-                'source' => 'siakad', // Kirim data tambahan jika perlu
-            ]);
-    
+                        'source' => 'siakad', // Kirim data tambahan jika perlu
+                    ]);
+
             // Periksa respons berhasil
             if ($response->successful()) {
                 return $response->json(); // Mengembalikan data dari respons API
             }
-    
+
             // Jika respons gagal
             return [
                 'error' => 'Failed to send JWT to SIEDOM',
@@ -281,11 +281,11 @@ class Auth extends Controller
     {
         $token = $request->bearerToken(); // Ambil token dari Authorization Header
         $expiresAt = now()->addMinutes(config('jwt.ttl', 60)); // Sesuai waktu expired JWT
-    
+
         if ($token) {
             Cache::put("blacklist:$token", true, $expiresAt); // Simpan token dalam blacklist
         }
-            Session::flush();
+        Session::flush();
         // return response()->json(['message' => 'Logout berhasil. Silakan login kembali.']);
         return response()->json(['Sudah Keluar' => 'Silahkan Login Lagi']);
     }
@@ -314,9 +314,9 @@ class Auth extends Controller
                 $kaprodiList[] = [
                     'kode_program_studi' => $kr->unit_id,
                     'nama_program_studi' => $pDetail ? $pDetail->nama_program_studi : $kr->unit_id,
-                    'role_code'          => $kr->role_code,
-                    'status_jabatan'     => $kr->status_jabatan,
-                    'is_primary'         => (int)$kr->is_primary
+                    'role_code' => $kr->role_code,
+                    'status_jabatan' => $kr->status_jabatan,
+                    'is_primary' => (int) $kr->is_primary
                 ];
             }
         }
@@ -329,9 +329,9 @@ class Auth extends Controller
                 $kaprodiList[] = [
                     'kode_program_studi' => $lp->kode_program_studi,
                     'nama_program_studi' => $lp->nama_program_studi,
-                    'role_code'          => 'kaprodi',
-                    'status_jabatan'     => 'definitif',
-                    'is_primary'         => 1
+                    'role_code' => 'kaprodi',
+                    'status_jabatan' => 'definitif',
+                    'is_primary' => 1
                 ];
             }
         }
@@ -348,9 +348,9 @@ class Auth extends Controller
             foreach ($dekanRoles as $dr) {
                 $fDetail = $fakDetails->get($dr->unit_id);
                 $dekanList[] = [
-                    'kode_fakultas'  => (string)$dr->unit_id,
-                    'nama_fakultas'  => $fDetail ? $fDetail->nama_fakultas : $dr->unit_id,
-                    'role_code'      => $dr->role_code,
+                    'kode_fakultas' => (string) $dr->unit_id,
+                    'nama_fakultas' => $fDetail ? $fDetail->nama_fakultas : $dr->unit_id,
+                    'role_code' => $dr->role_code,
                     'status_jabatan' => $dr->status_jabatan
                 ];
             }
@@ -362,21 +362,21 @@ class Auth extends Controller
                 ->get();
             foreach ($legacyFak as $lf) {
                 $dekanList[] = [
-                    'kode_fakultas'  => (string)$lf->kode_fakultas,
-                    'nama_fakultas'  => $lf->nama_fakultas,
-                    'role_code'      => 'dekan',
+                    'kode_fakultas' => (string) $lf->kode_fakultas,
+                    'nama_fakultas' => $lf->nama_fakultas,
+                    'role_code' => 'dekan',
                     'status_jabatan' => ($lf->plt == 1 ? 'plt' : 'definitif')
                 ];
             }
         }
 
         return response()->json([
-            'status'       => true,
-            'id_dosen'     => $id_dosen,
-            'is_kaprodi'   => count($kaprodiList) > 0,
+            'status' => true,
+            'id_dosen' => $id_dosen,
+            'is_kaprodi' => count($kaprodiList) > 0,
             'kaprodi_list' => $kaprodiList,
-            'is_dekan'     => count($dekanList) > 0,
-            'dekan_list'   => $dekanList
+            'is_dekan' => count($dekanList) > 0,
+            'dekan_list' => $dekanList
         ]);
     }
 }

@@ -328,25 +328,45 @@ class Mskripsi extends Model
                     ->first();
 
                 $is_bebas_keu = !empty($bebasKeu);
+                $is_legacy_ujian = false;
+
                 if (!$is_bebas_keu) {
-                    $semua_lolos = false;
+                    $is_legacy_ujian = DB::table('akd_skripsi_ujian')
+                        ->where('nim', $nim)
+                        ->whereIn('status', ['disetujui', 'dijadwalkan', 'dinilai', 'menunggu_penetapan', 'lulus'])
+                        ->exists();
+
+                    if ($is_legacy_ujian) {
+                        $is_bebas_keu = true;
+                    } else {
+                        $semua_lolos = false;
+                    }
                 }
 
                 $sikeuHost = env('SIKEU_URL', 'https://sikeudev.umuka.ac.id');
-                $cetakUrl = $is_bebas_keu ? rtrim($sikeuHost, '/') . '/bebas-keuangan/cetak/' . $bebasKeu->valid_id : null;
+                $cetakUrl = (!empty($bebasKeu)) ? rtrim($sikeuHost, '/') . '/bebas-keuangan/cetak/' . $bebasKeu->valid_id : null;
+
+                $isiStatus = '';
+                if (!empty($bebasKeu)) {
+                    $isiStatus = 'Disahkan (Valid ID: ' . $bebasKeu->valid_id . ')';
+                } else if ($is_legacy_ujian) {
+                    $isiStatus = 'Dispensasi Historis (Ujian telah terlaksana sebelum kebijakan BAK)';
+                } else {
+                    $isiStatus = 'Belum Diterbitkan oleh Bagian Administrasi Keuangan (BAK)';
+                }
 
                 $hasil[] = [
                     'no' => $index++,
                     'id_syarat_prodi' => null,
                     'syarat' => 'Surat Bebas Administrasi Keuangan (BAK)',
-                    'isi' => $is_bebas_keu ? 'Disahkan (Valid ID: ' . $bebasKeu->valid_id . ')' : 'Belum Diterbitkan oleh Bagian Administrasi Keuangan (BAK)',
+                    'isi' => $isiStatus,
                     'hubungi' => 'Bagian Administrasi Keuangan (BAK)',
                     'status' => $is_bebas_keu ? 'v' : 'x',
                     'jenis' => 'administrasi_keuangan',
                     'is_wajib' => 1,
                     'tipe_upload' => null,
                     'kode_syarat' => 'BEBAS_KEUANGAN_BAK',
-                    'valid_id' => $is_bebas_keu ? $bebasKeu->valid_id : null,
+                    'valid_id' => !empty($bebasKeu) ? $bebasKeu->valid_id : null,
                     'cetak_url' => $cetakUrl
                 ];
             }
@@ -619,25 +639,45 @@ class Mskripsi extends Model
                     ->first();
 
                 $is_bebas_keu = !empty($bebasKeu);
+                $is_legacy_ujian = false;
+
                 if (!$is_bebas_keu) {
-                    $semua_lolos = false;
+                    $is_legacy_ujian = DB::table('akd_skripsi_ujian')
+                        ->where('nim', $nim)
+                        ->whereIn('status', ['disetujui', 'dijadwalkan', 'dinilai', 'menunggu_penetapan', 'lulus'])
+                        ->exists();
+
+                    if ($is_legacy_ujian) {
+                        $is_bebas_keu = true;
+                    } else {
+                        $semua_lolos = false;
+                    }
                 }
 
                 $sikeuHost = env('SIKEU_URL', 'https://sikeudev.umuka.ac.id');
-                $cetakUrl = $is_bebas_keu ? rtrim($sikeuHost, '/') . '/bebas-keuangan/cetak/' . $bebasKeu->valid_id : null;
+                $cetakUrl = (!empty($bebasKeu)) ? rtrim($sikeuHost, '/') . '/bebas-keuangan/cetak/' . $bebasKeu->valid_id : null;
+
+                $isiStatus = '';
+                if (!empty($bebasKeu)) {
+                    $isiStatus = 'Disahkan (Valid ID: ' . $bebasKeu->valid_id . ')';
+                } else if ($is_legacy_ujian) {
+                    $isiStatus = 'Dispensasi Historis (Ujian telah terlaksana sebelum kebijakan BAK)';
+                } else {
+                    $isiStatus = 'Belum Diterbitkan oleh Bagian Administrasi Keuangan (BAK)';
+                }
 
                 $hasil[] = [
                     'no' => $index++,
                     'id_syarat_prodi' => null,
                     'syarat' => 'Surat Bebas Administrasi Keuangan (BAK)',
-                    'isi' => $is_bebas_keu ? 'Disahkan (Valid ID: ' . $bebasKeu->valid_id . ')' : 'Belum Diterbitkan oleh Bagian Administrasi Keuangan (BAK)',
+                    'isi' => $isiStatus,
                     'hubungi' => 'Bagian Administrasi Keuangan (BAK)',
                     'status' => $is_bebas_keu ? 'v' : 'x',
                     'jenis' => 'administrasi_keuangan',
                     'is_wajib' => 1,
                     'tipe_upload' => null,
                     'kode_syarat' => 'BEBAS_KEUANGAN_BAK',
-                    'valid_id' => $is_bebas_keu ? $bebasKeu->valid_id : null,
+                    'valid_id' => !empty($bebasKeu) ? $bebasKeu->valid_id : null,
                     'cetak_url' => $cetakUrl
                 ];
             }
